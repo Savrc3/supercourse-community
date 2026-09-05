@@ -264,7 +264,7 @@ def _merge_config(default: dict[str, Any], stored: dict[str, Any]) -> dict[str, 
 
 def reminder_message(todo: Todo, course_name: str, offset: str) -> str:
     course = course_name or "杂事"
-    return f"超课表提醒\n{course}\n{todo.title}\n将在 {offset} 后到期。"
+    return f"课序提醒\n{course}\n{todo.title}\n将在 {offset} 后到期。"
 
 
 def _detail(row: ReminderLog) -> dict[str, Any]:
@@ -357,7 +357,7 @@ def _send_class_event(session: Session, settings: Settings, event: ClassReminder
         event_id=event.event_id,
         todo_id=None,
         fire_at=event.fire_at,
-        message=f"超课表上课提醒\n{event.course_name}{room}\n15 分钟后开始。",
+        message=f"课序上课提醒\n{event.course_name}{room}\n15 分钟后开始。",
     )
 
 

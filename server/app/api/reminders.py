@@ -73,7 +73,7 @@ def reminder_logs(device_id: CurrentDeviceId, session: Db, limit: int = 100) -> 
 @router.post("/reminders/test-qq")
 def test_qq(device_id: CurrentDeviceId) -> dict[str, Any]:
     try:
-        send_private_message(get_settings(), "超课表提醒通道测试：QQ 通知已连通。")
+        send_private_message(get_settings(), "课序提醒通道测试：QQ 通知已连通。")
     except Exception as exc:
         raise HTTPException(
             status_code=502, detail={"code": "qq_failed", "message": str(exc)}

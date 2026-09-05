@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "超课表 —— 单人多端互通的大学生课表与课程待办应用",
+  "description": "课序 —— 单人多端互通的个人课表与学习事务管理工具",
   "engines": {
     "node": ">=24"
   },

@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
   appId: 'icu.savrc3.supercourse',
-  appName: '超课表',
+  appName: '课序',
   webDir: '../web/dist',
   server: {
     androidScheme: 'https',

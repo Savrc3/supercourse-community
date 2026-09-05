@@ -65,7 +65,7 @@ async function previewNext() {
       .flatMap((todo) => calculateReminderTimes(todo, config.value).map((item) => ({ todo, item })))
       .sort((a, b) => a.item.fireAt.getTime() - b.item.fireAt.getTime())[0]
     if (!next) { message.value = '当前没有可预览的待办提醒，请先创建未完成且设置截止时间的待办'; return }
-    message.value = await showSystemNotification(`超课表预览：${next.todo.title}`, '这是一次立即弹出的系统通知，不会修改待办。', next.todo.id)
+    message.value = await showSystemNotification(`课序预览：${next.todo.title}`, '这是一次立即弹出的系统通知，不会修改待办。', next.todo.id)
   } catch { error.value = '预览失败，请稍后重试' } finally { previewing.value = false }
 }
 

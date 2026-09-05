@@ -75,7 +75,7 @@ function platformName(): string {
 
 <template>
   <section class="login-page">
-    <h1>{{ mode === 'register' ? '创建账号' : '登录超课表' }}</h1>
+    <h1>{{ mode === 'register' ? '创建账号' : '登录课序' }}</h1>
     <p class="login-desc">同一账号登录的电脑、手机会自动同步，不需要配对码。</p>
     <form class="login-form" @submit.prevent="submit">
       <label>账号<input v-model="username" autocomplete="username" required placeholder="输入账号"></label>

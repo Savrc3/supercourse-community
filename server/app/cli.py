@@ -18,7 +18,7 @@ from app.core.auth import create_pairing as _auth_create_pairing
 from app.core.db import make_engine, session_scope
 from app.sync.backup import export_all, restore_all
 
-app = typer.Typer(help="超课表运维命令")
+app = typer.Typer(help="课序运维命令")
 
 
 def _ensure_schema(engine: Engine) -> None:

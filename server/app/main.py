@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.log_level)
     app = FastAPI(
-        title="超课表 API",
+        title="课序 API",
         version=APP_VERSION,
         lifespan=lifespan,
         docs_url="/docs" if settings.env == "dev" else None,

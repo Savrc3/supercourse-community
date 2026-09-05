@@ -33,7 +33,7 @@ export async function showSystemNotification(title: string, body: string, todoId
   if (Capacitor.isNativePlatform()) {
     const permission = await LocalNotifications.checkPermissions()
     if (permission.display !== 'granted') return '请先允许手机通知'
-    await LocalNotifications.createChannel({ id: 'supercourse-reminders', name: '超课表提醒', description: '待办和上课提醒', importance: 5, visibility: 1 })
+    await LocalNotifications.createChannel({ id: 'supercourse-reminders', name: '课序提醒', description: '待办和上课提醒', importance: 5, visibility: 1 })
     await LocalNotifications.schedule({
       notifications: [{ id: Date.now() % 2_000_000_000, title, body, schedule: { at: new Date(Date.now() + 500) }, channelId: 'supercourse-reminders', extra: todoId ? { todoId } : undefined }],
     })
@@ -92,7 +92,7 @@ export async function startLocalReminderScheduler(): Promise<() => void> {
       const timer = window.setTimeout(() => {
         if (stopped) return
         if (item.type === 'todo') {
-          void showSystemNotification(`超课表：${item.todo.title}`, `${item.todo.course_id ? '课程待办' : '杂事'} · 提前一天提醒`, item.todo.id)
+          void showSystemNotification(`课序：${item.todo.title}`, `${item.todo.course_id ? '课程待办' : '杂事'} · 提前一天提醒`, item.todo.id)
         } else {
           void showSystemNotification(`上课提醒：${item.courseName}`, `${item.room ? `${item.room} · ` : ''}15 分钟后开始`)
         }
@@ -140,10 +140,10 @@ async function startNativeReminderScheduler(): Promise<() => void> {
       ? calculateClassReminderTimes(terms, courses, slots, periods, config, now).map((item) => ({ type: 'class' as const, ...item }))
       : []
     const items = [...todoItems, ...classItems].sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime()).slice(0, MAX_SCHEDULED)
-    await LocalNotifications.createChannel({ id: 'supercourse-reminders', name: '超课表提醒', description: '待办和上课提醒', importance: 5, visibility: 1 })
+    await LocalNotifications.createChannel({ id: 'supercourse-reminders', name: '课序提醒', description: '待办和上课提醒', importance: 5, visibility: 1 })
     await LocalNotifications.schedule({
       notifications: items.map((item) => item.type === 'todo'
-        ? { id: notificationId(`${item.todo.id}:${item.offset}`), title: `超课表：${item.todo.title}`, body: '提前一天提醒', schedule: { at: item.fireAt }, channelId: 'supercourse-reminders', extra: { todoId: item.todo.id } }
+        ? { id: notificationId(`${item.todo.id}:${item.offset}`), title: `课序：${item.todo.title}`, body: '提前一天提醒', schedule: { at: item.fireAt }, channelId: 'supercourse-reminders', extra: { todoId: item.todo.id } }
         : { id: notificationId(item.id), title: `上课提醒：${item.courseName}`, body: `${item.room ? `${item.room} · ` : ''}15 分钟后开始`, schedule: { at: item.fireAt }, channelId: 'supercourse-reminders' }),
     })
   }

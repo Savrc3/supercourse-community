@@ -1,7 +1,7 @@
 [project]
 name = "supercourse-server"
 version = "0.0.1"
-description = "超课表后端：同步真相源 + 提醒调度 + 教务导入"
+description = "课序后端：同步真相源 + 提醒调度 + 教务导入"
 requires-python = ">=3.10,<3.11"
 dependencies = [
   "fastapi>=0.115",

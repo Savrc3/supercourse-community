@@ -2,7 +2,7 @@
   "name": "@supercourse/desktop",
   "private": true,
   "version": "1.0.0",
-  "description": "超课表 Windows 桌面端",
+  "description": "课序 Windows 桌面端",
   "main": "main.cjs",
   "type": "commonjs",
   "scripts": {
@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "icu.savrc3.supercourse",
-    "productName": "超课表",
+    "productName": "课序",
     "files": [
       "main.cjs",
       "preload.cjs",
@@ -51,7 +51,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "超课表"
+      "shortcutName": "课序"
     }
   }
 }

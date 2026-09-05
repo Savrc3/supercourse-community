@@ -80,7 +80,7 @@ function createMainWindow(settings) {
     show: false,
     minWidth: 960,
     minHeight: 640,
-    title: '超课表',
+    title: '课序',
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -121,14 +121,14 @@ function createTray(settings) {
     : path.resolve(__dirname, '../web/public/pwa/icon-192.png')
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
-  tray.setToolTip('超课表')
+  tray.setToolTip('课序')
   tray.on('double-click', () => showMainWindow())
   rebuildTrayMenu(settings)
 }
 
 function rebuildTrayMenu(settings) {
   tray?.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开超课表', click: () => showMainWindow() },
+    { label: '打开课序', click: () => showMainWindow() },
     { type: 'separator' },
     {
       label: '开机自启',
@@ -224,7 +224,7 @@ function readFile(file) {
 ipcMain.on('desktop-show-main', () => showMainWindow())
 ipcMain.on('desktop-notify', (_event, payload = {}) => {
   if (!Notification.isSupported()) return
-  const notification = new Notification({ title: String(payload.title || '超课表'), body: String(payload.body || '') })
+  const notification = new Notification({ title: String(payload.title || '课序'), body: String(payload.body || '') })
   notification.on('click', () => showMainWindow(typeof payload.todoId === 'string' ? `/todo/${payload.todoId}` : undefined))
   notification.show()
 })

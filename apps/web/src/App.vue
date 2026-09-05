@@ -67,7 +67,7 @@ const navItems = computed(() =>
           :size="22"
           aria-hidden="true"
         />
-        <span>超课表</span>
+        <span>课序</span>
       </RouterLink>
       <nav
         class="desktop-nav"

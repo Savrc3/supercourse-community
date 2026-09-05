@@ -18,11 +18,11 @@ function finish() {
 
 <template>
   <section class="onboarding">
-    <h1>欢迎使用超课表</h1>
+    <h1>欢迎使用课序</h1>
     <p>这是安卓 App 的首次使用提示。为了让待办提醒在后台也能准时到达，请完成下面设置。</p>
     <ol>
       <li>允许通知权限（当前状态：{{ permission }}）。</li>
-      <li>在系统设置中允许“超课表”自启动。</li>
+      <li>在系统设置中允许“课序”自启动。</li>
       <li>电池使用策略选择“无限制”，并在最近任务中锁定应用。</li>
     </ol>
     <div class="onboarding-actions">

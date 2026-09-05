@@ -1,18 +1,22 @@
 @import 'tailwindcss';
 
 :root {
-  --bg: #fbfaf8;
+  --bg: #f6f7fb;
   --surface: #ffffff;
-  --line: #edebe7;
-  --line-strong: #d8d4ce;
-  --text: #20211f;
-  --text-secondary: #686a66;
-  --accent: #1f6feb;
-  --accent-soft: rgba(31, 111, 235, 0.1);
-  --danger: #b3403f;
-  --shadow: 0 8px 24px rgba(32, 33, 31, 0.06);
+  --surface-raised: #fbfcff;
+  --line: #e4e8f0;
+  --line-strong: #c9d2e2;
+  --text: #182230;
+  --text-secondary: #667085;
+  --accent: #3859d6;
+  --accent-deep: #24378d;
+  --accent-soft: rgba(56, 89, 214, 0.1);
+  --success: #33866f;
+  --warning: #b9781a;
+  --danger: #c84d5e;
+  --shadow: 0 8px 24px rgba(36, 55, 141, 0.08);
   --rh: 52px;
-  --radius: 9px;
+  --radius: 12px;
   --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
 
   font-family: var(--font-sans);
@@ -26,15 +30,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131315;
-    --surface: #1b1c1f;
-    --line: #2c2d31;
-    --line-strong: #42444a;
-    --text: #f1f0ed;
-    --text-secondary: #a8aaa5;
-    --accent: #5b9bff;
-    --accent-soft: rgba(91, 155, 255, 0.16);
-    --danger: #ff8080;
+    --bg: #111522;
+    --surface: #1a2030;
+    --surface-raised: #20283a;
+    --line: #293246;
+    --line-strong: #3a4962;
+    --text: #eef2ff;
+    --text-secondary: #a8b3c8;
+    --accent: #8b9cff;
+    --accent-deep: #b5c0ff;
+    --accent-soft: rgba(139, 156, 255, 0.16);
+    --success: #6bc3a7;
+    --warning: #e0ad5a;
+    --danger: #ff8d9d;
     --shadow: none;
     color-scheme: dark;
   }
@@ -90,7 +98,8 @@ a {
   justify-content: space-between;
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 1px 0 var(--line), 0 8px 24px rgba(36, 55, 141, 0.04);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -101,11 +110,17 @@ a {
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--accent-deep);
+  letter-spacing: -0.02em;
 }
 
 .brand svg {
   color: var(--accent);
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border-radius: 9px;
+  background: var(--accent-soft);
 }
 
 .desktop-nav {
@@ -119,7 +134,7 @@ a {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
   font-size: 14px;
   transition:
@@ -182,7 +197,7 @@ a {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #3b8b47;
+  background: var(--success);
 }
 
 .online-dot.offline {
@@ -203,7 +218,7 @@ a {
   font-size: 13px;
   color: var(--accent);
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--accent-soft);
 }
 
@@ -248,7 +263,7 @@ a {
   justify-content: center;
   color: var(--accent);
   background: var(--accent-soft);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .day-tabs {
@@ -263,7 +278,7 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 10px;
   color: var(--text-secondary);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -291,6 +306,10 @@ a {
   border: 1px solid var(--line);
   background: var(--surface);
   transition: transform 180ms ease-out;
+}
+
+.panel {
+  box-shadow: var(--shadow);
 }
 
 .course-card.tint {

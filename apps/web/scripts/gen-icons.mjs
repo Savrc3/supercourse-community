@@ -1,5 +1,5 @@
 // 生成 PWA 所需 PNG 图标（无第三方依赖：用 Node zlib 手写 PNG 编码）。
-// 纯品牌色方块 + 居中白色"超"字（用简单图形近似，避免依赖字体渲染）。
+// 纯品牌色方块 + 居中的纸张/课程线条标记（避免依赖字体渲染）。
 import zlib from 'node:zlib'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '../public/pwa')
 
-const ACCENT = [31, 111, 235] // #1F6FEB
+const ACCENT = [56, 89, 214] // #3859D6
+const PAPER = [247, 249, 255]
+const PAPER_BACK = [171, 185, 239]
 
 function crc32(buf) {
   let c = ~0
@@ -28,7 +30,13 @@ function chunk(type, data) {
   return Buffer.concat([len, typeBuf, data, crcBuf])
 }
 
-// 生成指定大小的 PNG：品牌色背景 + 一个白色菱形（近似 logo，无字体依赖）。
+function roundedRect(x, y, width, height, radius, px, py) {
+  const dx = Math.max(x + radius - px, 0, px - (x + width - radius))
+  const dy = Math.max(y + radius - py, 0, py - (y + height - radius))
+  return dx * dx + dy * dy <= radius * radius
+}
+
+// 生成指定大小的 PNG：靛蓝底色 + 两层纸张 + 五条课程线。
 function makePng(size, padRatio = 0.2) {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
@@ -37,25 +45,28 @@ function makePng(size, padRatio = 0.2) {
   ihdr[9] = 6 // RGBA
   const rows = []
   const margin = Math.floor(size * padRatio)
-  // 白色内菱形
-  const cx = size / 2
+  const cardX = margin + Math.floor(size * 0.05)
+  const cardY = margin + Math.floor(size * 0.08)
+  const cardW = size - cardX * 2
+  const cardH = size - cardY - margin - Math.floor(size * 0.04)
+  const radius = Math.floor(size * 0.1)
   for (let y = 0; y < size; y++) {
     const row = Buffer.alloc(1 + size * 4)
     row[0] = 0 // filter: none
     for (let x = 0; x < size; x++) {
-      const inside = Math.abs(x - cx) / (size / 2 - margin) + Math.abs(y - cx) / (size / 2 - margin) <= 1
       const o = 1 + x * 4
-      if (inside) {
-        row[o] = 255
-        row[o + 1] = 255
-        row[o + 2] = 255
-        row[o + 3] = 255
-      } else {
-        row[o] = ACCENT[0]
-        row[o + 1] = ACCENT[1]
-        row[o + 2] = ACCENT[2]
-        row[o + 3] = 255
-      }
+      let color = ACCENT
+      if (roundedRect(cardX - Math.floor(size * 0.06), cardY + Math.floor(size * 0.06), cardW, cardH, radius, x, y)) color = PAPER_BACK
+      if (roundedRect(cardX, cardY, cardW, cardH, radius, x, y)) color = PAPER
+      const lineStart = cardX + Math.floor(size * 0.15)
+      const lineEnd = cardX + cardW - Math.floor(size * 0.15)
+      const lineWidth = Math.max(1, Math.floor(size * 0.012))
+      const lineYs = [0.38, 0.49, 0.6, 0.71, 0.82].map((ratio) => cardY + Math.floor(cardH * ratio))
+      if (x >= lineStart && x <= lineEnd && lineYs.some((lineY) => Math.abs(y - lineY) <= lineWidth)) color = ACCENT
+      row[o] = color[0]
+      row[o + 1] = color[1]
+      row[o + 2] = color[2]
+      row[o + 3] = 255
     }
     rows.push(row)
   }

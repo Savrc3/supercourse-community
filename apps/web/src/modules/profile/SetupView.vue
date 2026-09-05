@@ -32,7 +32,7 @@ function chooseRemote() {
 
 <template>
   <section class="setup-page">
-    <h1>开始使用超课表</h1>
+    <h1>开始使用课序</h1>
     <p class="setup-desc">你可以只在当前设备使用，也可以连接自己的服务器同步。</p>
     <div class="setup-options">
       <button class="setup-card" type="button" @click="chooseLocal">

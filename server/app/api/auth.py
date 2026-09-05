@@ -84,8 +84,8 @@ def register(payload: dict[str, Any], session: Db) -> dict[str, Any]:
         created_at=now_iso(),
     )
     session.add(account)
-    device_id, token = create_device_token(session, device_name, platform)
-    return {"username": account.username, "device_id": device_id, "token": token}
+    device_id, credential = create_device_token(session, device_name, platform)
+    return {"username": account.username, "device_id": device_id, "token": credential}
 
 
 @router.post("/login")
@@ -108,8 +108,8 @@ def login(request: Request, payload: dict[str, Any], session: Db) -> dict[str, A
             detail={"code": "invalid_login", "message": "账号或密码错误"},
         )
     login_failures.clear(key)
-    device_id, token = create_device_token(session, device_name, platform)
-    return {"username": account.username, "device_id": device_id, "token": token}
+    device_id, credential = create_device_token(session, device_name, platform)
+    return {"username": account.username, "device_id": device_id, "token": credential}
 
 
 __all__ = ["router", "hash_password", "verify_password"]

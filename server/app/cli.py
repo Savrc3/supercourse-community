@@ -49,9 +49,9 @@ def issue_device(
 ) -> None:
     """签发首个设备令牌（一次性打印明文，库里只存 SHA-256）。"""
     with _cli_session() as session:
-        device_id, token = create_device_token(session, name, platform)
+        device_id, credential = create_device_token(session, name, platform)
         typer.echo(f"device_id: {device_id}")
-        typer.echo(f"token:     {token}")
+        typer.echo(f"token:     {credential}")
         typer.echo("(令牌仅显示这一次，请妥善保管)")
 
 

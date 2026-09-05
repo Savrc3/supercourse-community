@@ -60,8 +60,8 @@ def pairing_exchange(
     platform = str(payload.get("platform", ""))
     if not code or not name:
         raise _bad_request("invalid_request", "缺少 code 或 name")
-    device_id, token = exchange_pairing(session, code=code, name=name, platform=platform)
-    return {"device_id": device_id, "token": token}
+    device_id, credential = exchange_pairing(session, code=code, name=name, platform=platform)
+    return {"device_id": device_id, "token": credential}
 
 
 @router.get("/bootstrap")

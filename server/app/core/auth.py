@@ -34,20 +34,20 @@ def _utcnow() -> datetime:
 
 def create_device_token(session: Session, name: str, platform: str) -> tuple[str, str]:
     """签发明文 token + device_id。库里只存 token_hash。"""
-    token = secrets.token_urlsafe(32)
+    credential = secrets.token_urlsafe(32)
     device_id = f"dev-{secrets.token_hex(8)}"
     session.add(
         Device(
             id=device_id,
             name=name,
             platform=platform,
-            token_hash=TokenHasher.hash(token),
+            token_hash=TokenHasher.hash(credential),
             created_at=now_iso(),
             last_seen_at=now_iso(),
         )
     )
     session.flush()
-    return device_id, token
+    return device_id, credential
 
 
 def create_pairing(session: Session, created_by: str) -> tuple[str, int]:
@@ -95,9 +95,9 @@ def exchange_pairing(
             detail={"code": "pairing_expired", "message": "配对码已过期"},
         )
     pairing.used_at = now_iso()
-    device_id, token = create_device_token(session, name, platform)
+    device_id, credential = create_device_token(session, name, platform)
     session.flush()
-    return device_id, token
+    return device_id, credential
 
 
 def get_current_device_id(

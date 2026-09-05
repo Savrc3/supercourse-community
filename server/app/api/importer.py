@@ -111,6 +111,7 @@ async def import_xls(
         "expires_at": expires_at,
         "semester": result.semester,
         "start_date": result.start_date,
+        "term_exists": term is not None,
         "courses": result.courses,
         "slots": result.slots,
         "warnings": result.warnings,
@@ -134,7 +135,10 @@ def import_commit(
     d = draft["payload"]
     term = session.get(Term, d["term_id"]) if d.get("term_id") else None
     if term is None:
-        term = _ensure_term(session, d)
+        requested_start_date = payload.get("start_date")
+        if requested_start_date is not None and not isinstance(requested_start_date, str):
+            raise _bad("invalid_start_date", "第一周周一必须是 YYYY-MM-DD 日期")
+        term = _ensure_term(session, d, start_date_override=requested_start_date)
 
     accepted = payload.get("accepted")
     if accepted is None:
@@ -244,12 +248,23 @@ def _select_diff_items(draft: dict[str, Any], accepted: list[Any]) -> list[dict[
     return selected
 
 
-def _ensure_term(session: Session, d: dict[str, Any]) -> Term:
+def _ensure_term(
+    session: Session,
+    d: dict[str, Any],
+    *,
+    start_date_override: str | None = None,
+) -> Term:
     name = d.get("semester") or "导入学期"
     existing = session.execute(select(Term).where(Term.name == name)).scalar_one_or_none()
     if existing:
         return existing
     from app.core.journal import next_rev as nr
+
+    start_date = start_date_override or d.get("start_date") or now_iso()[:10]
+    try:
+        datetime.strptime(start_date, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        raise _bad("invalid_start_date", "第一周周一必须是 YYYY-MM-DD 日期") from None
 
     term = Term(
         id=str(uuid.uuid4()),
@@ -257,7 +272,7 @@ def _ensure_term(session: Session, d: dict[str, Any]) -> Term:
         updated_at=now_iso(),
         name=name,
         label=None,
-        start_date=d.get("start_date") or now_iso()[:10],
+        start_date=start_date,
         weeks_total=20,
         is_current=1,
     )

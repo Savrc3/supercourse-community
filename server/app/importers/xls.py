@@ -102,17 +102,26 @@ def parse_cell_block(
 
 
 def _split_on_blank(lines: list[str]) -> list[list[str]]:
-    blocks: list[list[str]] = []
+    raw_blocks: list[list[str]] = []
     cur: list[str] = []
     for ln in lines:
         if not ln.strip():
             if cur:
-                blocks.append(cur)
+                raw_blocks.append(cur)
                 cur = []
         else:
             cur.append(ln.strip())
     if cur:
-        blocks.append(cur)
+        raw_blocks.append(cur)
+
+    # 有些教务表在“教师为空”时会额外保留一个空行。
+    # 这行位于课程代码和周次之间，不能把后面的周次误判成新课程名。
+    blocks: list[list[str]] = []
+    for block in raw_blocks:
+        if blocks and block and _WEEK_RE.search(block[0]):
+            blocks[-1].extend(block)
+        else:
+            blocks.append(block)
     return blocks
 
 

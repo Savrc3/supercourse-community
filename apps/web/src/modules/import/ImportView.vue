@@ -37,6 +37,8 @@ const draftId = ref('')
 const selectedFile = ref<File | null>(null)
 const fileName = ref('')
 const expiresAt = ref('')
+const semesterStartDate = ref('')
+const needsStartDate = ref(false)
 
 const diffGroups = computed(() => [
   { kind: 'added' as const, label: '新增', hint: '文件中有，当前学期没有', items: diff.value.added },
@@ -89,6 +91,8 @@ async function upload() {
     draftId.value = data.draft_id
     fileName.value = data.filename || selectedFile.value.name
     expiresAt.value = data.expires_at || ''
+    semesterStartDate.value = data.start_date || ''
+    needsStartDate.value = !data.term_exists && !data.start_date
     warnings.value = data.warnings ?? []
     errors.value = data.errors ?? []
     diff.value = {
@@ -105,7 +109,7 @@ async function upload() {
 }
 
 async function commit() {
-  if (!draftId.value || selectedCount.value === 0) return
+  if (!draftId.value || selectedCount.value === 0 || (needsStartDate.value && !semesterStartDate.value)) return
   phase.value = 'importing'
   status.value = '正在导入…'
   const accepted = diffGroups.value.flatMap((group) =>
@@ -117,7 +121,11 @@ async function commit() {
     const response = await apiFetch('/import/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sync.token}` },
-      body: JSON.stringify({ draft_id: draftId.value, accepted }),
+      body: JSON.stringify({
+        draft_id: draftId.value,
+        accepted,
+        ...(semesterStartDate.value ? { start_date: semesterStartDate.value } : {}),
+      }),
     })
     const data = await response.json()
     if (!response.ok) {
@@ -139,6 +147,8 @@ function reset() {
   selectedFile.value = null
   fileName.value = ''
   diff.value = emptyDiff()
+  semesterStartDate.value = ''
+  needsStartDate.value = false
 }
 
 function goTimetable() {
@@ -257,6 +267,20 @@ function diffKey(item: DiffItem) {
         </ul>
       </div>
 
+      <div
+        v-if="needsStartDate"
+        class="start-date-box"
+      >
+        <label for="semester-start-date">第一周周一</label>
+        <input
+          id="semester-start-date"
+          v-model="semesterStartDate"
+          type="date"
+          required
+        >
+        <p class="muted">这份教务文件没有开学日期。请填写本学期第一周的星期一，不能填打印日期。</p>
+      </div>
+
       <p
         v-if="totalChanges === 0"
         class="empty-state"
@@ -311,7 +335,7 @@ function diffKey(item: DiffItem) {
       <div class="actions">
         <button
           class="primary-btn"
-          :disabled="phase === 'importing' || selectedCount === 0"
+          :disabled="phase === 'importing' || selectedCount === 0 || (needsStartDate && !semesterStartDate)"
           @click="commit"
         >
           {{ phase === 'importing' ? '导入中…' : `确认导入（${selectedCount}项）` }}
@@ -465,6 +489,30 @@ function diffKey(item: DiffItem) {
 .notice ul {
   margin: 4px 0 0;
   padding-left: 18px;
+}
+.start-date-box {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.start-date-box label {
+  font-weight: 600;
+}
+.start-date-box input {
+  width: min(240px, 100%);
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+.start-date-box p {
+  margin: 0;
 }
 .empty-state {
   margin: 24px 0;

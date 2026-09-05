@@ -1,0 +1,57 @@
+{
+  "name": "@supercourse/desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "超课表 Windows 桌面端",
+  "main": "main.cjs",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "npm run build --workspace @supercourse/web && electron .",
+    "build": "npm run build --workspace @supercourse/web && electron-builder --win nsis",
+    "pack": "npm run build --workspace @supercourse/web && electron-builder --win dir",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "42.11.2",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "icu.savrc3.supercourse",
+    "productName": "超课表",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "state.cjs"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web/dist"
+      },
+      {
+        "from": "../web/public/pwa/icon-192.png",
+        "to": "tray.png"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../web/public/pwa/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "超课表"
+    }
+  }
+}

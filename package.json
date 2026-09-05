@@ -1,0 +1,20 @@
+{
+  "name": "supercourse",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "超课表 —— 单人多端互通的大学生课表与课程待办应用",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "powershell -NoProfile -File scripts/dev.ps1",
+    "build": "npm run build --workspace @supercourse/web",
+    "typecheck": "npm run typecheck --workspace @supercourse/web",
+    "lint": "npm run lint --workspace @supercourse/web",
+    "test": "npm run test --workspace @supercourse/web"
+  }
+}

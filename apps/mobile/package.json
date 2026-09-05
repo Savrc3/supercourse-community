@@ -1,0 +1,24 @@
+{
+  "name": "@supercourse/mobile",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --workspace @supercourse/web && node scripts/prepare-android.mjs && npx cap sync android",
+    "android:debug": "npm run build && cd android && gradlew.bat assembleDebug",
+    "android:release": "npm run build && cd android && gradlew.bat assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor-community/file-opener": "^6.0.1",
+    "@capacitor/camera": "^6.1.2",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/filesystem": "^6.0.2",
+    "@capacitor/local-notifications": "^6.1.2",
+    "@capacitor/share": "^6.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1"
+  }
+}

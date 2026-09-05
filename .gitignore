@@ -1,0 +1,66 @@
+# --- Node / 前端 ---
+node_modules/
+dist/
+dist-electron/
+dist-apk/
+.vite/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# --- Python / 后端 ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest-tmp/
+.pytest-now/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# --- 安卓 / 桌面打包 ---
+apps/mobile/android/
+*.keystore
+*.jks
+keystore.properties
+local.properties
+.gradle/
+build/
+
+# --- 秘密与本地数据（永不入库）---
+.env
+.env.*
+!.env.example
+server/config.toml
+!server/config.example.toml
+data/
+server/data/
+backups/
+*.bak
+*.db
+*.db-wal
+*.db-shm
+
+# --- 未脱敏的原始教务文件（只留本地，入库前必须走脱敏脚本）---
+fixtures-local/
+
+# --- 本地/CI e2e 临时令牌（测试专用，不入库）---
+.e2e-token
+.e2e-data/
+
+# --- 工具与系统 ---
+.codex/
+logs/
+public-release/
+public-release-clean/
+public-release-final/
+public-release-v1/
+*.log
+Thumbs.db
+Desktop.ini
+.DS_Store

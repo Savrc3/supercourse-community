@@ -1,0 +1,12 @@
+.git
+.codex
+node_modules
+apps/mobile/android
+apps/*/dist
+server/.venv
+server/data
+data
+backups
+logs
+*.db
+*.log

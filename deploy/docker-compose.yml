@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    env_file:
+      - ../server/.env
+    environment:
+      SC_PORT: 8090
+      SC_DATA_DIR: /data
+    volumes:
+      - supercourse-data:/data
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${SUPERCOURSE_HTTP_PORT:-8080}:80"
+
+volumes:
+  supercourse-data:

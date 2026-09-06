@@ -504,63 +504,65 @@ async function deleteEditorSlot() {
 
       <template v-else>
         <!-- 周视图：左侧大节时间轴 + 7 列网格，课程按小节跨行定位 -->
-        <div class="week-grid">
-          <div class="week-head">
-            <span class="week-axis-head">时间</span>
-            <span
-              v-for="h in header"
-              :key="h.weekday"
-              class="week-head-cell"
-              :class="{ today: h.date === today }"
-            >
-              <b>周{{ h.label }}</b>
-              <small>{{ h.date.slice(5) }}</small>
-            </span>
-          </div>
-          <div
-            class="week-body"
-            :style="{ gridTemplateRows: `repeat(${bigRows.length}, minmax(72px, 1fr))` }"
-          >
-            <template
-              v-for="(row, rowIndex) in bigRows"
-              :key="row.big"
-            >
-              <div
-                class="week-axis"
-                :style="{ gridColumn: 1, gridRow: rowIndex + 1 }"
-              >
-                <span class="axis-time">{{ row.start }}</span>
-                <span class="axis-label">{{ row.big }}大节</span>
-              </div>
+        <div class="week-scroll">
+          <div class="week-grid">
+            <div class="week-head">
+              <span class="week-axis-head">时间</span>
               <span
-                v-for="(h, dayIndex) in header"
-                :key="`${row.big}-${h.weekday}`"
-                class="week-cell"
+                v-for="h in header"
+                :key="h.weekday"
+                class="week-head-cell"
                 :class="{ today: h.date === today }"
-                :style="{ gridColumn: dayIndex + 2, gridRow: rowIndex + 1 }"
-              />
-            </template>
-            <!-- 课程块：跨行跨列定位 -->
-            <article
-              v-for="b in weekCourses"
-              :key="'wc-' + b.slotId"
-              class="week-course"
-              :style="{
-                gridColumn: (b.weekday + 1) + ' / span 1',
-                gridRow: (b.rowFrom + 1) + ' / ' + (b.rowTo + 2),
-                borderLeftColor: b.color,
-                background: colorMix(b.color),
-              }"
-              role="button"
-              tabindex="0"
-              :aria-label="`编辑${b.displayName}`"
-              @click="openEditEditor(b.slotId)"
-              @keydown.enter="openEditEditor(b.slotId)"
+              >
+                <b>周{{ h.label }}</b>
+                <small>{{ h.date.slice(5) }}</small>
+              </span>
+            </div>
+            <div
+              class="week-body"
+              :style="{ gridTemplateRows: `repeat(${bigRows.length}, minmax(72px, 1fr))` }"
             >
-              <span class="wc-name">{{ b.displayName }}</span>
-              <span class="wc-room">{{ b.room || '' }}</span>
-              <span class="wc-time">{{ timeRange(b.startLesson, b.endLesson) }}</span>
-            </article>
+              <template
+                v-for="(row, rowIndex) in bigRows"
+                :key="row.big"
+              >
+                <div
+                  class="week-axis"
+                  :style="{ gridColumn: 1, gridRow: rowIndex + 1 }"
+                >
+                  <span class="axis-time">{{ row.start }}</span>
+                  <span class="axis-label">{{ row.big }}大节</span>
+                </div>
+                <span
+                  v-for="(h, dayIndex) in header"
+                  :key="`${row.big}-${h.weekday}`"
+                  class="week-cell"
+                  :class="{ today: h.date === today }"
+                  :style="{ gridColumn: dayIndex + 2, gridRow: rowIndex + 1 }"
+                />
+              </template>
+              <!-- 课程块：跨行跨列定位 -->
+              <article
+                v-for="b in weekCourses"
+                :key="'wc-' + b.slotId"
+                class="week-course"
+                :style="{
+                  gridColumn: (b.weekday + 1) + ' / span 1',
+                  gridRow: (b.rowFrom + 1) + ' / ' + (b.rowTo + 2),
+                  borderLeftColor: b.color,
+                  background: colorMix(b.color),
+                }"
+                role="button"
+                tabindex="0"
+                :aria-label="`编辑${b.displayName}`"
+                @click="openEditEditor(b.slotId)"
+                @keydown.enter="openEditEditor(b.slotId)"
+              >
+                <span class="wc-name">{{ b.displayName }}</span>
+                <span class="wc-room">{{ b.room || '' }}</span>
+                <span class="wc-time">{{ timeRange(b.startLesson, b.endLesson) }}</span>
+              </article>
+            </div>
           </div>
         </div>
       </template>
@@ -745,17 +747,24 @@ async function deleteEditorSlot() {
   font-weight: 700;
 }
 
-.week-grid {
+.week-scroll {
   margin-top: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.week-grid {
+  margin-top: 0;
   display: grid;
-  grid-template-columns: 64px repeat(7, 1fr);
+  grid-template-columns: 72px repeat(7, minmax(0, 1fr));
   grid-template-rows: auto auto;
   gap: 6px;
 }
 .week-head {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: 64px repeat(7, 1fr);
+  grid-template-columns: 72px repeat(7, minmax(0, 1fr));
   gap: 6px;
 }
 .week-axis-head {
@@ -782,7 +791,7 @@ async function deleteEditorSlot() {
   position: relative;
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 64px repeat(7, 1fr);
+  grid-template-columns: 72px repeat(7, minmax(0, 1fr));
   min-height: 400px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -847,8 +856,16 @@ async function deleteEditorSlot() {
 }
 .wc-room,
 .wc-time {
+  min-width: 0;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .week-grid {
+    min-width: 864px;
+  }
 }
 
 .day-grid {

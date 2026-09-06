@@ -2,7 +2,7 @@
 // 纯品牌色方块 + 居中的纸张/课程线条标记（避免依赖字体渲染）。
 import zlib from 'node:zlib'
 import { writeFileSync, mkdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -37,7 +37,7 @@ function roundedRect(x, y, width, height, radius, px, py) {
 }
 
 // 生成指定大小的 PNG：靛蓝底色 + 两层纸张 + 五条课程线。
-function makePng(size, padRatio = 0.2) {
+export function makePng(size, padRatio = 0.2) {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
   ihdr.writeUInt32BE(size, 4)
@@ -80,8 +80,10 @@ function makePng(size, padRatio = 0.2) {
   ])
 }
 
-mkdirSync(outDir, { recursive: true })
-writeFileSync(join(outDir, 'icon-192.png'), makePng(192, 0.18))
-writeFileSync(join(outDir, 'icon-512.png'), makePng(512, 0.18))
-writeFileSync(join(outDir, 'icon-maskable-512.png'), makePng(512, 0.2))
-console.log('PWA icons generated in', outDir)
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  mkdirSync(outDir, { recursive: true })
+  writeFileSync(join(outDir, 'icon-192.png'), makePng(192, 0.18))
+  writeFileSync(join(outDir, 'icon-512.png'), makePng(512, 0.18))
+  writeFileSync(join(outDir, 'icon-maskable-512.png'), makePng(512, 0.2))
+  console.log('PWA icons generated in', outDir)
+}

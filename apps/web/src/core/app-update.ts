@@ -1,5 +1,5 @@
 import { App } from '@capacitor/app'
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, CapacitorHttp } from '@capacitor/core'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { FileOpener } from '@capacitor-community/file-opener'
 
@@ -28,10 +28,10 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
 
 export async function downloadAndInstallAndroidUpdate(url: string): Promise<void> {
   if (!Capacitor.isNativePlatform()) throw new Error('仅 Android App 支持安装更新')
-  const response = await apiFetch(url)
-  if (!response.ok) throw new Error(`download failed ${response.status}`)
-  const data = new Uint8Array(await response.arrayBuffer())
-  const base64 = toBase64(data)
+  const response = await CapacitorHttp.get({ url, responseType: 'arraybuffer' })
+  if (response.status < 200 || response.status >= 300) throw new Error(`download failed ${response.status}`)
+  if (typeof response.data !== 'string' || response.data.length === 0) throw new Error('download returned no APK data')
+  const base64 = response.data
   const path = 'updates/supercourse.apk'
   await Filesystem.writeFile({ path, data: base64, directory: Directory.Cache, recursive: true })
   const file = await Filesystem.getUri({ path, directory: Directory.Cache })
@@ -45,12 +45,4 @@ function compareVersions(left: string, right: string): number {
     if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) - (b[i] ?? 0)
   }
   return 0
-}
-
-function toBase64(data: Uint8Array): string {
-  let binary = ''
-  for (let i = 0; i < data.length; i += 0x8000) {
-    binary += String.fromCharCode(...data.subarray(i, i + 0x8000))
-  }
-  return btoa(binary)
 }

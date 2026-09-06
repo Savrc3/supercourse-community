@@ -1,7 +1,7 @@
 {
   "name": "@supercourse/desktop",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "课序 Windows 桌面端",
   "main": "main.cjs",
   "type": "commonjs",

@@ -1,6 +1,6 @@
 {
   "name": "supercourse",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "description": "课序 —— 单人多端互通的个人课表与学习事务管理工具",

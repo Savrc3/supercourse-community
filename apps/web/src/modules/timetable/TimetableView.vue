@@ -203,12 +203,6 @@ function colorOf(courseId: string): string {
   return PALETTE[(course?.color ?? 0) % PALETTE.length]
 }
 
-function timeRange(start: number, end: number): string {
-  const s = periods.value.find((p) => p.lesson_no === start)
-  const e = periods.value.find((p) => p.lesson_no === end)
-  return s && e ? `${s.start_time}-${e.end_time}` : `第${start}-${end}节`
-}
-
 function colorMix(hex: string): string {
   // 淡染模式：8% 颜色混入 surface。
   const [r, g, b] = hex.match(/\w\w/g)!.map((x) => parseInt(x, 16))
@@ -559,7 +553,6 @@ async function deleteEditorSlot() {
             >
               <span class="wc-name">{{ b.displayName }}</span>
               <span class="wc-room">{{ b.room || '' }}</span>
-              <span class="wc-time">{{ timeRange(b.startLesson, b.endLesson) }}</span>
             </article>
           </div>
         </div>
@@ -846,8 +839,7 @@ async function deleteEditorSlot() {
   overflow-wrap: anywhere;
   line-height: 1.35;
 }
-.wc-room,
-.wc-time {
+.wc-room {
   min-width: 0;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
@@ -891,8 +883,7 @@ async function deleteEditorSlot() {
     line-height: 1.2;
     word-break: break-all;
   }
-  .wc-room,
-  .wc-time {
+  .wc-room {
     font-size: 9px;
     line-height: 1.15;
     word-break: break-all;

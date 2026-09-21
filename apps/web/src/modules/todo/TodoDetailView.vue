@@ -20,12 +20,15 @@ import { db, type CourseRow, type MediaRow, type TermRow, type TodoPriority, typ
 import { decodeTags, encodeTags, isDoneStatus, PRIORITY_LABELS } from './derive'
 import { EMPTY_TODO_DOC, markdownToTodoBody, parseTodoBody, todoBodyText, todoBodyToMarkdown } from './body'
 import { compressImage, sha256 } from './media'
+import { formatLeadTime, parseOffsets, REMIND_PRESETS } from './reminder'
 
 const PRIORITY_OPTIONS: { value: TodoPriority; label: string }[] = [
   { value: 2, label: PRIORITY_LABELS[2] },
   { value: 1, label: PRIORITY_LABELS[1] },
   { value: 0, label: PRIORITY_LABELS[0] },
 ]
+
+type RemindMode = 'inherit' | 'custom' | 'off'
 
 interface TodoForm {
   title: string
@@ -35,8 +38,15 @@ interface TodoForm {
   allDay: boolean
   priority: TodoPriority
   tags: string
-  remindEnabled: boolean
+  remindMode: RemindMode
+  offsets: string[]
 }
+
+const REMIND_MODES: { value: RemindMode; label: string }[] = [
+  { value: 'inherit', label: '跟随全局' },
+  { value: 'custom', label: '自定义' },
+  { value: 'off', label: '关闭' },
+]
 
 const route = useRoute()
 const router = useRouter()
@@ -121,7 +131,7 @@ onUnmounted(() => {
 })
 
 function emptyForm(): TodoForm {
-  return { title: '', courseId: '', dueDate: '', dueTime: '', allDay: true, priority: 1, tags: '', remindEnabled: true }
+  return { title: '', courseId: '', dueDate: '', dueTime: '', allDay: true, priority: 1, tags: '', remindMode: 'inherit', offsets: [] }
 }
 
 async function load() {
@@ -149,7 +159,8 @@ async function load() {
     allDay: row.due_all_day === 1 || !row.due_at?.includes('T'),
     priority: row.priority,
     tags: decodeTags(row.tags).join('，'),
-    remindEnabled: row.remind_mode !== 'off',
+    remindMode: row.remind_mode === 'off' ? 'off' : row.remind_mode === 'custom' ? 'custom' : 'inherit',
+    offsets: parseOffsets(row.remind_offsets),
   })
   editor.value?.commands.setContent(await localizeBody(parseTodoBody(row.body)), false)
   await flushMediaQueue()
@@ -163,6 +174,30 @@ function dueValue(): string | null {
   if (!form.dueDate) return null
   return form.allDay ? form.dueDate : `${form.dueDate}T${form.dueTime}`
 }
+
+/** 只有「自定义」且真的选了提前量时才落库；否则存 null，等同退回全局默认。 */
+function savedOffsets(): string | null {
+  if (form.remindMode !== 'custom') return null
+  const offsets = parseOffsets(JSON.stringify(form.offsets))
+  return offsets.length > 0 ? JSON.stringify(offsets) : null
+}
+
+function toggleOffset(value: string) {
+  const index = form.offsets.indexOf(value)
+  if (index >= 0) form.offsets.splice(index, 1)
+  else form.offsets.push(value)
+  scheduleSave()
+}
+
+const reminderHint = computed(() => {
+  if (form.remindMode === 'off') return '关闭后仅影响这一条待办。'
+  if (form.remindMode === 'custom') {
+    return form.offsets.length > 0
+      ? `将在截止前 ${form.offsets.map((item) => formatLeadTime(item)).join('、')} 各提醒一次。`
+      : '未选择提前量时按全局默认（截止前一天）提醒。'
+  }
+  return '跟随全局设置（默认截止前一天提醒）。'
+})
 
 function scheduleSave() {
   if (!loaded.value || !todo.value) return
@@ -200,8 +235,8 @@ async function saveNow() {
     due_all_day: form.dueDate ? (form.allDay ? 1 : 0) : 1,
     priority: form.priority,
     tags: encodeTags(form.tags),
-    remind_mode: form.remindEnabled ? 'inherit' : 'off',
-    remind_offsets: null,
+    remind_mode: form.remindMode,
+    remind_offsets: savedOffsets(),
     status: nextStatus,
     done_at: nextDoneAt,
     body: JSON.stringify(normalizeBody(editor.value.getJSON())),
@@ -729,11 +764,29 @@ function currentDue(): string {
             >
           </label>
 
-          <label class="field wide checkbox-field reminder-toggle">
+          <div class="field wide reminder-block">
             <span>待办提醒</span>
-            <input v-model="form.remindEnabled" type="checkbox" @change="scheduleSave">
-            <small class="field-hint">默认在截止前一天提醒；关闭后仅影响这一条待办。</small>
-          </label>
+            <div class="reminder-modes">
+              <label v-for="mode in REMIND_MODES" :key="mode.value" class="reminder-mode">
+                <input v-model="form.remindMode" type="radio" :value="mode.value" @change="scheduleSave">
+                <span>{{ mode.label }}</span>
+              </label>
+            </div>
+            <div v-if="form.remindMode === 'custom'" class="reminder-presets">
+              <button
+                v-for="preset in REMIND_PRESETS"
+                :key="preset.value"
+                class="preset-chip"
+                type="button"
+                :class="{ active: form.offsets.includes(preset.value) }"
+                :aria-pressed="form.offsets.includes(preset.value)"
+                @click="toggleOffset(preset.value)"
+              >
+                提前 {{ preset.label }}
+              </button>
+            </div>
+            <small class="field-hint">{{ reminderHint }}</small>
+          </div>
 
           <button
             class="done-toggle"
@@ -816,6 +869,16 @@ function currentDue(): string {
 .checkbox-field span { order: 2; }
 .checkbox-field input { order: 1; }
 .checkbox-field input { width: 18px; min-height: 0; height: 18px; padding: 0; accent-color: var(--accent); }
+.reminder-block { align-content: start; }
+.reminder-modes { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 3px; }
+.reminder-mode { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; }
+.reminder-mode input { width: 16px; min-height: 0; height: 16px; padding: 0; margin: 0; accent-color: var(--accent); }
+.reminder-mode:hover, .reminder-mode:has(input:checked) { border-color: var(--accent); }
+.reminder-mode:has(input:checked) { background: var(--accent-soft); color: var(--accent); }
+.reminder-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.preset-chip { min-height: 32px; padding: 0 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: 12.5px; cursor: pointer; transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease; }
+.preset-chip:hover, .preset-chip.active { border-color: var(--accent); color: var(--accent); }
+.preset-chip.active { background: var(--accent-soft); }
 .done-toggle { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 8px; width: 100%; margin-top: 20px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); text-align: left; }
 .done-toggle:hover, .done-toggle.checked { border-color: var(--accent); }
 .done-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 50%; color: #fff; }

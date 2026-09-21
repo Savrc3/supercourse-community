@@ -124,6 +124,43 @@ describe('TodoDetailView 待办详情', () => {
     wrapper.unmount()
   })
 
+  it('自定义提前量：切换到自定义后选中的提前量写进 remind_offsets', async () => {
+    const wrapper = mount(TodoDetailView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    await flushPromises()
+    expect(wrapper.findAll('.preset-chip')).toHaveLength(0)
+
+    const custom = wrapper.findAll('.reminder-mode input').find((input) => (input.element as HTMLInputElement).value === 'custom')
+    expect(custom).toBeDefined()
+    await custom!.setValue()
+    await vi.advanceTimersByTimeAsync(800)
+    expect(wrapper.findAll('.preset-chip')).toHaveLength(7)
+    expect(wrapper.get('.field-hint').text()).toContain('未选择提前量')
+
+    const chip = wrapper.findAll('.preset-chip').find((item) => item.text().includes('1 小时'))!
+    await chip.trigger('click')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(mocks.localWrite).toHaveBeenLastCalledWith(
+      'todo',
+      'todo-1',
+      expect.objectContaining({ remind_mode: 'custom', remind_offsets: '["-PT1H"]' }),
+      3,
+    )
+    expect(wrapper.get('.field-hint').text()).toContain('1 小时')
+
+    // 再点一次取消选中：模式仍是自定义，但提前量清空（等同退回全局默认）
+    await chip.trigger('click')
+    await vi.advanceTimersByTimeAsync(800)
+    expect(mocks.localWrite).toHaveBeenLastCalledWith(
+      'todo',
+      'todo-1',
+      expect.objectContaining({ remind_mode: 'custom', remind_offsets: null }),
+      3,
+    )
+    wrapper.unmount()
+  })
+
   it('详情页可以切换二元完成状态', async () => {
     const wrapper = mount(TodoDetailView, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },

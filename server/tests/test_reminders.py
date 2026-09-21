@@ -286,3 +286,44 @@ def test_daily_summary_skips_soft_deleted_rows(db_session: Session) -> None:
     # 时段被删只是拿不到时间文本，课程本身照旧列出
     assert "模拟电子技术" in without_period
     assert "08:00-08:45" not in without_period
+
+
+def test_custom_offsets_override_defaults() -> None:
+    """remind_mode=custom 时用待办自己的提前量，按提前量从早到晚触发。"""
+    now = datetime.fromisoformat("2026-09-04T00:00:00+08:00")
+    events = calculate_events(
+        todo(remind_mode="custom", remind_offsets='["-PT30M", "-P1D"]'),
+        DEFAULT_CONFIG,
+        now=now,
+    )
+    assert [event.offset for event in events] == ["-P1D", "-PT30M"]
+    assert events[0].fire_at.isoformat() == "2026-09-04T09:00:00+08:00"
+    assert events[1].fire_at.isoformat() == "2026-09-05T08:30:00+08:00"
+
+
+def test_custom_offsets_fall_back_when_unusable() -> None:
+    """写坏的/空的自定义提前量不能让提醒消失，必须退回全局默认。"""
+    now = datetime.fromisoformat("2026-09-04T08:00:00+08:00")
+    for raw in (None, "", "不是 JSON", "{}", "[]", '["bad", "P1D", 5]', '["PT1H"]'):
+        events = calculate_events(
+            todo(remind_mode="custom", remind_offsets=raw),
+            DEFAULT_CONFIG,
+            now=now,
+        )
+        assert [event.offset for event in events] == ["-P1D"], raw
+    assert (
+        calculate_events(
+            todo(remind_mode="off", remind_offsets='["-P1D"]'), DEFAULT_CONFIG, now=now
+        )
+        == []
+    )
+
+
+def test_custom_offsets_dedupe_and_sort() -> None:
+    now = datetime.fromisoformat("2026-09-04T00:00:00+08:00")
+    events = calculate_events(
+        todo(remind_mode="custom", remind_offsets='["-PT30M", "-P1D", "-PT30M", "-PT2H"]'),
+        DEFAULT_CONFIG,
+        now=now,
+    )
+    assert [event.offset for event in events] == ["-P1D", "-PT2H", "-PT30M"]

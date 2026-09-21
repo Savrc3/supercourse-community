@@ -96,9 +96,34 @@ def _defaults_for(todo: Todo, config: dict[str, Any]) -> list[str]:
     return [str(value) for value in values if parse_iso_duration(str(value)) is not None]
 
 
+def _parse_offsets(raw: str | None) -> list[str]:
+    """解析待办的自定义提前量（JSON 数组）：只留可解析的负数时长，去重后按提前量从早到晚排序。"""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    values: dict[str, timedelta] = {}
+    for item in parsed:
+        if not isinstance(item, str):
+            continue
+        delta = parse_iso_duration(item)
+        if delta is None or delta >= timedelta(0):
+            continue
+        values.setdefault(item.strip(), delta)
+    return [item for item, _ in sorted(values.items(), key=lambda pair: pair[1])]
+
+
 def _offsets_for(todo: Todo, config: dict[str, Any]) -> list[str]:
     if todo.remind_mode == "off":
         return []
+    if todo.remind_mode == "custom":
+        custom = _parse_offsets(todo.remind_offsets)
+        if custom:
+            return custom
     return _defaults_for(todo, config)
 
 

@@ -102,9 +102,9 @@ REGISTRY: dict[str, EntitySpec] = {
             "priority",
             "tags",
             "remind_mode",
-            # 预留：per-todo 自定义提前量。当前前后端都只读全局 defaults，写入后
-            # 不生效；字段留在同步白名单里是为了兼容旧客户端（客户端可能仍推它，
-            # 一旦删掉会变成 unknown_field 把 op 卡死）。
+            # per-todo 自定义提前量：JSON 数组，元素是负的 ISO 8601 时长（如 ["-PT30M","-P1D"]）。
+            # remind_mode=custom 且能解析出至少一个负数时长时生效；否则退回全局 defaults。
+            # 字段必须留在同步白名单里：旧客户端仍在推它，删掉会变成 unknown_field 把 op 卡死。
             "remind_offsets",
             "sort_order",
             "created_at",

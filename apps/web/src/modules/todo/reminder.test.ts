@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_REMINDER_CONFIG, calculateClassReminderTimes, calculateReminderTimes, dueDate, formatLeadTime, mergeReminderConfig, parseIsoDuration } from './reminder'
+import { DEFAULT_REMINDER_CONFIG, calculateClassReminderTimes, calculateReminderTimes, dueDate, formatLeadTime, mergeReminderConfig, parseIsoDuration, parseOffsets, reminderOffsets } from './reminder'
 
 const base = {
   id: 'todo-1', kind: 'todo', remind_mode: 'inherit', remind_offsets: null, due_at: '2026-09-05', due_all_day: 1,
@@ -21,6 +21,27 @@ describe('reminder calculation', () => {
     const now = new Date(2026, 8, 4, 8)
     expect(calculateReminderTimes(base, DEFAULT_REMINDER_CONFIG, now).map((item) => item.offset)).toEqual(['-P1D'])
     expect(calculateReminderTimes({ ...base, remind_mode: 'off' }, DEFAULT_REMINDER_CONFIG, now)).toEqual([])
+  })
+
+  it('自定义提前量覆盖全局默认', () => {
+    const now = new Date(2026, 8, 4, 0)
+    const custom = { ...base, remind_mode: 'custom', remind_offsets: '["-PT30M","-P1D"]' }
+    expect(calculateReminderTimes(custom, DEFAULT_REMINDER_CONFIG, now).map((item) => item.offset)).toEqual(['-P1D', '-PT30M'])
+  })
+
+  it('自定义提前量不可用时退回全局默认', () => {
+    const now = new Date(2026, 8, 4, 8)
+    for (const raw of [null, '', '不是 JSON', '{}', '[]', '["坏的","P1D",5]', '["PT1H"]']) {
+      const todo = { ...base, remind_mode: 'custom', remind_offsets: raw }
+      expect(calculateReminderTimes(todo, DEFAULT_REMINDER_CONFIG, now).map((item) => item.offset)).toEqual(['-P1D'])
+    }
+    expect(reminderOffsets({ remind_mode: 'off', remind_offsets: '["-P1D"]' }, DEFAULT_REMINDER_CONFIG)).toEqual([])
+  })
+
+  it('解析自定义提前量：去重、只留提前量、从早到晚排序', () => {
+    expect(parseOffsets('["-PT30M","-P1D","-PT30M","-PT2H"]')).toEqual(['-P1D', '-PT2H', '-PT30M'])
+    expect(parseOffsets('["P1D", 3, "坏的"]')).toEqual([])
+    expect(parseOffsets(null)).toEqual([])
   })
 
   it('把偏移渲染成人类可读的提前量', () => {

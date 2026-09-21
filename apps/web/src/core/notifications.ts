@@ -151,8 +151,8 @@ async function startNativeReminderScheduler(): Promise<() => void> {
     await LocalNotifications.createChannel({ id: 'supercourse-reminders', name: '课序提醒', description: '待办和上课提醒', importance: 5, visibility: 1 })
     await LocalNotifications.schedule({
       notifications: items.map((item) => item.type === 'todo'
-        ? { id: notificationId(`${item.todo.id}:${item.offset}`), title: `课序：${item.todo.title}`, body: '提前一天提醒', schedule: { at: item.fireAt }, channelId: 'supercourse-reminders', extra: { todoId: item.todo.id } }
-        : { id: notificationId(item.id), title: `上课提醒：${item.courseName}`, body: `${item.room ? `${item.room} · ` : ''}15 分钟后开始`, schedule: { at: item.fireAt }, channelId: 'supercourse-reminders' }),
+        ? { id: notificationId(`${item.todo.id}:${item.offset}`), title: `课序：${item.todo.title}`, body: `提前 ${formatLeadTime(item.offset)}提醒`, schedule: { at: item.fireAt }, channelId: 'supercourse-reminders', extra: { todoId: item.todo.id } }
+        : { id: notificationId(item.id), title: `上课提醒：${item.courseName}`, body: `${item.room ? `${item.room} · ` : ''}提前 ${formatLeadTime(config.defaults.class[0] ?? '-PT15M')}开始`, schedule: { at: item.fireAt }, channelId: 'supercourse-reminders' }),
     })
   }
   await refresh()

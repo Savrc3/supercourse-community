@@ -48,12 +48,51 @@ export function dueDate(todo: Pick<TodoRow, 'due_at' | 'due_all_day'>): Date | n
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-export function reminderOffsets(todo: Pick<TodoRow, 'remind_mode'>, config: ReminderConfig): string[] {
-  return todo.remind_mode === 'off' ? [] : config.defaults.todo
+/** 自定义提前量可选值：与后端一致，用负的 ISO 8601 时长表示「提前多久」。 */
+export const REMIND_PRESETS: { value: string; label: string }[] = [
+  { value: '-PT5M', label: '5 分钟' },
+  { value: '-PT15M', label: '15 分钟' },
+  { value: '-PT30M', label: '30 分钟' },
+  { value: '-PT1H', label: '1 小时' },
+  { value: '-PT2H', label: '2 小时' },
+  { value: '-P1D', label: '1 天' },
+  { value: '-P3D', label: '3 天' },
+]
+
+/** 解析待办上的 remind_offsets（JSON 数组）；只保留负数、可解析的 ISO 时长，去重并按先后排序。 */
+export function parseOffsets(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  const values = new Set<string>()
+  for (const item of parsed) {
+    if (typeof item !== 'string') continue
+    const ms = parseIsoDuration(item)
+    if (ms === null || ms >= 0) continue
+    values.add(item.trim())
+  }
+  return [...values].sort((a, b) => (parseIsoDuration(a) ?? 0) - (parseIsoDuration(b) ?? 0))
+}
+
+export function reminderOffsets(
+  todo: Pick<TodoRow, 'remind_mode' | 'remind_offsets'>,
+  config: ReminderConfig,
+): string[] {
+  if (todo.remind_mode === 'off') return []
+  if (todo.remind_mode === 'custom') {
+    const custom = parseOffsets(todo.remind_offsets)
+    if (custom.length > 0) return custom
+  }
+  return config.defaults.todo
 }
 
 export function calculateReminderTimes(
-  todo: Pick<TodoRow, 'id' | 'remind_mode' | 'due_at' | 'due_all_day' | 'status' | '_deleted_at'>,
+  todo: Pick<TodoRow, 'id' | 'remind_mode' | 'remind_offsets' | 'due_at' | 'due_all_day' | 'status' | '_deleted_at'>,
   config: ReminderConfig = DEFAULT_REMINDER_CONFIG,
   now = new Date(),
 ): ReminderTime[] {

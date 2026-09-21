@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     course: { toArray: vi.fn(async () => []) },
   },
   subscribe: vi.fn().mockReturnValue(() => undefined),
+  subscribeChanges: vi.fn().mockReturnValue(() => undefined),
 }))
 
 vi.mock('../../core/sync', () => ({ sync: mocks }))

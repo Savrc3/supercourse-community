@@ -8,6 +8,7 @@ const {
   Menu,
   nativeImage,
   Notification,
+  shell,
   Tray,
   ipcMain,
   screen,
@@ -41,7 +42,7 @@ if (!gotLock) {
 async function bootstrap() {
   const settings = loadSettings()
   const port = await startStaticServer(Number(settings.port) || PORT_FALLBACK)
-  appUrl = `http://localhost:${port}`
+  appUrl = `http://127.0.0.1:${port}`
   settings.port = port
   saveSettings(settings)
   createMainWindow(settings)
@@ -171,7 +172,7 @@ function createStaticServer(preferredPort) {
   const tryListen = (port) => new Promise((resolve, reject) => {
     const server = http.createServer((request, response) => serveFile(root, request, response))
     server.once('error', reject)
-    server.listen(port, 'localhost', () => resolve({ server, port: server.address().port }))
+    server.listen(port, '127.0.0.1', () => resolve({ server, port: server.address().port }))
   })
   return tryListen(preferredPort).catch((error) => {
     if (error.code !== 'EADDRINUSE') throw error
@@ -189,7 +190,7 @@ function serveFile(root, request, response) {
   let requestUrl
   let pathname
   try {
-    requestUrl = new URL(request.url || '/', 'http://localhost')
+    requestUrl = new URL(request.url || '/', 'http://127.0.0.1')
     pathname = decodeURIComponent(requestUrl.pathname)
   } catch {
     response.writeHead(400)
@@ -207,7 +208,7 @@ function serveFile(root, request, response) {
   response.setHeader('X-Content-Type-Options', 'nosniff')
   response.setHeader('X-Frame-Options', 'DENY')
   response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https: http://localhost:* http://localhost:*; font-src 'self' data:; form-action 'self'")
+  response.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; form-action 'self'")
   response.setHeader('Content-Type', contentType(file))
   fs.createReadStream(file).pipe(response)
 }
@@ -222,6 +223,14 @@ function readFile(file) {
 }
 
 ipcMain.on('desktop-show-main', () => showMainWindow())
+ipcMain.on('desktop-app-version', (event) => {
+  event.returnValue = app.getVersion()
+})
+ipcMain.handle('desktop-open-external', async (_event, rawUrl) => {
+  const url = new URL(String(rawUrl))
+  if (url.protocol !== 'https:') throw new Error('只允许打开 HTTPS 更新地址')
+  await shell.openExternal(url.toString())
+})
 ipcMain.on('desktop-notify', (_event, payload = {}) => {
   if (!Notification.isSupported()) return
   const notification = new Notification({ title: String(payload.title || '课序'), body: String(payload.body || '') })

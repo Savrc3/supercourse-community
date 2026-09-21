@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentDeviceId
 from app.core.db import get_session
-from app.core.journal import now_iso
+from app.core.journal import next_rev, now_iso
 from app.importers.diff import compute_diff
 from app.importers.xls import parse_schedule_file
 from app.models import Course, CourseSlot, Meta, Term
@@ -257,6 +257,11 @@ def _ensure_term(
     name = d.get("semester") or "导入学期"
     existing = session.execute(select(Term).where(Term.name == name)).scalar_one_or_none()
     if existing:
+        # 导入是最常见的首个建课入口；即使旧学期没有作息表，也要补齐默认小节，
+        # 否则前端无法推导五个大节，周视图会把所有课程压成一整行。
+        from app.seed import seed_lesson_periods
+
+        seed_lesson_periods(session, existing.id)
         return existing
     from app.core.journal import next_rev as nr
 
@@ -278,6 +283,9 @@ def _ensure_term(
     )
     session.add(term)
     session.flush()
+    from app.seed import seed_lesson_periods
+
+    seed_lesson_periods(session, term.id)
     return term
 
 
@@ -353,7 +361,6 @@ def _restore_term(session: Session, term: Term, snap: dict[str, Any]) -> None:
         session.execute(delete(Course).where(Course.id.in_(cids)))
     term_data = snap.get("term", {})
     for field in (
-        "rev",
         "updated_at",
         "deleted_at",
         "name",
@@ -365,12 +372,16 @@ def _restore_term(session: Session, term: Term, snap: dict[str, Any]) -> None:
     ):
         if field in term_data:
             setattr(term, field, term_data[field])
+    term.rev = next_rev(session)
 
-    # 重新插入快照
+    # 重新插入快照。rev 不复用快照里的旧值：回滚也算一次写入，
+    # 取新号才能让其他设备在增量拉取里看到这次回滚，也不会与 seq 撞号。
     for c in snap.get("courses", []):
-        session.add(Course(**c))
+        payload = {k: v for k, v in c.items() if k != "rev"}
+        session.add(Course(**payload, rev=next_rev(session)))
     for s in snap.get("slots", []):
-        session.add(CourseSlot(**s))
+        payload = {k: v for k, v in s.items() if k != "rev"}
+        session.add(CourseSlot(**payload, rev=next_rev(session)))
 
 
 def _build_ops(
@@ -448,6 +459,8 @@ def _build_ops(
             course_id = str(uuid.uuid4())
             course_by_key[key] = course_id
             course_info = course_info_by_key.get(key, {})
+            imported_color = course_info.get("color")
+            color = imported_color if isinstance(imported_color, int) else len(course_by_key) - 1
             ops.append(
                 {
                     "op_id": f"imp-c-{uuid.uuid4().hex}",
@@ -458,7 +471,7 @@ def _build_ops(
                         "name": name,
                         "teacher": course_info.get("teacher"),
                         "code": course_info.get("code"),
-                        "color": course_info.get("color") or 0,
+                        "color": color % 8,
                     },
                     "base_rev": 0,
                 }

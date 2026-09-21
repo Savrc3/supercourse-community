@@ -54,7 +54,15 @@ describe('mapOutboxToOp', () => {
 })
 
 describe('reduceSyncState 同步状态机', () => {
-  const base: SyncState = { online: true, pending: 0, lastSyncAt: null, latestRev: 0, authInvalid: false }
+  const base: SyncState = {
+    online: true,
+    pending: 0,
+    lastSyncAt: null,
+    latestRev: 0,
+    syncing: false,
+    lastError: null,
+    authInvalid: false,
+  }
 
   it('online 事件切换在线状态', () => {
     expect(reduceSyncState({ ...base, online: true }, { type: 'online', online: false }).online).toBe(false)

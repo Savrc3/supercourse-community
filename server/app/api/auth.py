@@ -16,7 +16,7 @@ from app.core.auth import create_device_token
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.journal import now_iso
-from app.core.rate_limit import login_failures
+from app.core.rate_limit import client_ip, login_failures
 from app.models import Account
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -91,7 +91,7 @@ def register(payload: dict[str, Any], session: Db) -> dict[str, Any]:
 @router.post("/login")
 def login(request: Request, payload: dict[str, Any], session: Db) -> dict[str, Any]:
     username, password, device_name, platform = _credentials(payload)
-    key = f"{request.client.host if request.client else 'unknown'}:{username.casefold()}"
+    key = f"{client_ip(request)}:{username.casefold()}"
     if not login_failures.allow(key, limit=5, window=15 * 60):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

@@ -13,6 +13,8 @@ const route = useRoute()
 const appStore = useAppStore()
 const online = ref(true)
 const pending = ref(0)
+const syncing = ref(false)
+const syncError = ref('')
 const paired = ref(Boolean(sync.token))
 const authInvalid = ref(false)
 const localMode = ref(getConnectionMode() === 'local')
@@ -25,6 +27,8 @@ onMounted(() => {
     localMode.value = getConnectionMode() === 'local'
     online.value = s.online
     pending.value = s.pending
+    syncing.value = s.syncing
+    syncError.value = s.lastError ?? ''
     authInvalid.value = s.authInvalid
   })
   void startLocalReminderScheduler().then((stop) => {
@@ -109,6 +113,15 @@ const navItems = computed(() =>
               v-if="pending > 0"
               class="pending-badge"
             >待传 {{ pending }}</span>
+            <span
+              v-if="syncing"
+              class="syncing-badge"
+            >同步中</span>
+            <span
+              v-else-if="syncError"
+              class="sync-error-badge"
+              :title="syncError"
+            >同步失败</span>
           </template>
         </template>
         <RouterLink

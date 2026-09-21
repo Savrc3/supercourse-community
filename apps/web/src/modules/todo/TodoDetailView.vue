@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Bold, Check, ImagePlus, Link as LinkIcon, List, ListChecks, ListOrdered, Save, X } from 'lucide-vue-next'
+import { ArrowLeft, Bold, Check, Code2, Eye, ImagePlus, Link as LinkIcon, List, ListChecks, ListOrdered, Save, X } from 'lucide-vue-next'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -18,7 +18,7 @@ import { isLocalMode } from '../../core/connection'
 import { sync } from '../../core/sync'
 import { db, type CourseRow, type MediaRow, type TermRow, type TodoPriority, type TodoRow, type TodoStatus } from '../../db/db'
 import { decodeTags, encodeTags, isDoneStatus, PRIORITY_LABELS } from './derive'
-import { EMPTY_TODO_DOC, todoBodyText, parseTodoBody } from './body'
+import { EMPTY_TODO_DOC, markdownToTodoBody, parseTodoBody, todoBodyText, todoBodyToMarkdown } from './body'
 import { compressImage, sha256 } from './media'
 
 const PRIORITY_OPTIONS: { value: TodoPriority; label: string }[] = [
@@ -45,9 +45,15 @@ const terms = ref<TermRow[]>([])
 const courses = ref<CourseRow[]>([])
 const loaded = ref(false)
 const dirty = ref(false)
+/** 进入编辑会话后，即使自动保存完成，也不能被同步事件重载编辑器。 */
+const editingSession = ref(false)
+const remotePending = ref(false)
 const saving = ref(false)
 const saveState = ref('')
 const error = ref('')
+const sourceMode = ref(false)
+const markdownSource = ref('')
+const preserveMarkdownSource = ref(false)
 const mediaInput = ref<HTMLInputElement | null>(null)
 const pendingMedia = ref(0)
 const status = ref<TodoStatus>('0')
@@ -63,7 +69,10 @@ const editor = useEditor({
     TaskList,
     TaskItem.configure({ nested: true }),
   ],
-  onUpdate: () => scheduleSave(),
+  onUpdate: () => {
+    if (!sourceMode.value) preserveMarkdownSource.value = false
+    scheduleSave()
+  },
 })
 
 const activeTermGroups = computed(() => {
@@ -86,10 +95,17 @@ const done = computed(() => isDoneStatus(status.value))
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let unsubscribeSync: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
-  unsubscribeSync = sync.subscribe((state) => {
-    if (state.lastSyncAt && !dirty.value) void load()
+  unsubscribeSync = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['todo', 'course', 'term'].includes(entity))) return
+    if (editingSession.value || sourceMode.value || dirty.value) {
+      remotePending.value = true
+      return
+    }
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
   })
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('online', onOnline)
@@ -98,6 +114,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (saveTimer) clearTimeout(saveTimer)
+  if (reloadTimer) clearTimeout(reloadTimer)
   unsubscribeSync?.()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('online', onOnline)
@@ -117,6 +134,11 @@ async function load() {
     return
   }
   todo.value = row
+  editingSession.value = false
+  remotePending.value = false
+  sourceMode.value = false
+  markdownSource.value = ''
+  preserveMarkdownSource.value = false
   status.value = isDoneStatus(row.status) ? '1' : '0'
   doneAt.value = row.done_at
   Object.assign(form, {
@@ -144,6 +166,7 @@ function dueValue(): string | null {
 
 function scheduleSave() {
   if (!loaded.value || !todo.value) return
+  editingSession.value = true
   dirty.value = true
   saveState.value = '有未保存修改'
   if (saveTimer) clearTimeout(saveTimer)
@@ -152,6 +175,7 @@ function scheduleSave() {
 
 async function saveNow() {
   if (!todo.value || !editor.value || saving.value) return
+  if (sourceMode.value && !applyMarkdownSource()) return
   const title = form.title.trim()
   if (!title) {
     error.value = '标题不能为空'
@@ -195,6 +219,33 @@ async function saveNow() {
   } finally {
     saving.value = false
   }
+}
+
+function applyMarkdownSource(): boolean {
+  if (!editor.value) return false
+  try {
+    editor.value.commands.setContent(markdownToTodoBody(markdownSource.value, editor.value.schema), false)
+    return true
+  } catch {
+    error.value = 'Markdown 内容无法解析，请检查源码格式'
+    saveState.value = '保存失败'
+    return false
+  }
+}
+
+function toggleMarkdownMode() {
+  if (!editor.value) return
+  if (!sourceMode.value) {
+    if (!preserveMarkdownSource.value) {
+      markdownSource.value = todoBodyToMarkdown(normalizeBody(editor.value.getJSON()), editor.value.schema)
+    }
+    sourceMode.value = true
+    return
+  }
+  if (!applyMarkdownSource()) return
+  sourceMode.value = false
+  preserveMarkdownSource.value = true
+  scheduleSave()
 }
 
 function toggleDone() {
@@ -295,12 +346,23 @@ async function uploadLocalMedia(row: MediaRow) {
   }
   try {
     const result = await sync.uploadMedia(row.id, row.sha256, row.blob, row.filename ?? 'image.jpg')
-    await db.media.update(row.id, { uploaded: 1 })
+    // 服务端按 sha256 去重时会返回「已存在那一行」的 id；必须把本地行和正文里的
+    // media:// 引用一起改名，否则其他设备拿到的 id 在本机不存在，图片显示为已丢失。
+    if (result.id && result.id !== row.id) await rekeyLocalMedia(row, result.id)
+    await db.media.update(result.id || row.id, { uploaded: 1 })
     pendingMedia.value = Math.max(0, pendingMedia.value - 1)
-    replaceMediaSource(localMediaUrl(row.id), result.url)
     scheduleSave()
   } catch {
     // 保留 blob 与 media:// 引用，下一次页面加载或联网时重试。
+  }
+}
+
+/** 服务端改写了 media id（哈希去重命中已有行）时同步本地行与正文引用。 */
+async function rekeyLocalMedia(row: MediaRow, serverId: string) {
+  await db.media.put({ ...row, id: serverId, uploaded: 1 })
+  if (serverId !== row.id) await db.media.delete(row.id)
+  for (const [url, source] of localMediaSources) {
+    if (source === `media://${row.id}`) localMediaSources.set(url, `media://${serverId}`)
   }
 }
 
@@ -311,16 +373,6 @@ async function flushMediaQueue() {
 }
 
 const localMediaSources = new Map<string, string>()
-
-function localMediaUrl(id: string): string | undefined {
-  for (const [url, source] of localMediaSources) if (source === `media://${id}`) return url
-  return undefined
-}
-
-function replaceMediaSource(from: string | undefined, to: string) {
-  if (!from || !editor.value) return
-  editor.value.commands.setContent(mapBody(editor.value.getJSON(), (src) => src === from ? to : src), false)
-}
 
 async function localizeBody(doc: JSONContent): Promise<JSONContent> {
   const next: JSONContent = { ...doc }
@@ -545,6 +597,26 @@ function currentDue(): string {
                 aria-hidden="true"
               />
             </button>
+            <button
+              class="toolbar-btn"
+              type="button"
+              :aria-label="sourceMode ? '预览 Markdown' : 'Markdown源码'"
+              :aria-pressed="sourceMode"
+              :title="sourceMode ? '切回格式预览' : '切换 Markdown 源码模式'"
+              :class="{ active: sourceMode }"
+              @click="toggleMarkdownMode"
+            >
+              <Eye
+                v-if="sourceMode"
+                :size="16"
+                aria-hidden="true"
+              />
+              <Code2
+                v-else
+                :size="16"
+                aria-hidden="true"
+              />
+            </button>
           </div>
           <input
             ref="mediaInput"
@@ -554,11 +626,21 @@ function currentDue(): string {
             @change="addImage"
           >
           <EditorContent
+            v-if="!sourceMode"
             class="editor-content"
             :editor="editor"
             @paste="handlePaste"
           />
-          <p class="editor-hint">内容会自动保存，支持粘贴图片，按 Esc 返回列表。{{ pendingMedia ? `待上传图片 ${pendingMedia} 张` : '' }}</p>
+          <textarea
+            v-else
+            v-model="markdownSource"
+            class="markdown-source"
+            aria-label="Markdown源码"
+            spellcheck="false"
+            placeholder="# 直接输入 Markdown\n\n支持标题、列表、粗体、链接、代码和任务清单"
+            @input="scheduleSave"
+          />
+          <p class="editor-hint">{{ sourceMode ? '当前为 Markdown 源码模式，点击眼睛按钮可预览格式。' : '内容会自动保存，支持粘贴图片。' }}按 Esc 返回列表。{{ pendingMedia ? `待上传图片 ${pendingMedia} 张` : '' }}</p>
         </article>
 
         <aside class="meta-panel">
@@ -701,13 +783,28 @@ function currentDue(): string {
 .editor-content { min-height: 360px; }
 .editor-content :deep(.ProseMirror) { min-height: 330px; outline: none; color: var(--text); font-size: 15px; line-height: 1.75; }
 .editor-content :deep(.ProseMirror p) { margin: 0 0 10px; }
-.editor-content :deep(.ProseMirror ul), .editor-content :deep(.ProseMirror ol) { padding-left: 24px; }
+.editor-content :deep(.ProseMirror h1), .editor-content :deep(.ProseMirror h2), .editor-content :deep(.ProseMirror h3) { color: var(--text); line-height: 1.35; font-weight: 700; }
+.editor-content :deep(.ProseMirror h1) { margin: 0 0 16px; font-size: 1.8em; }
+.editor-content :deep(.ProseMirror h2) { margin: 20px 0 12px; font-size: 1.45em; }
+.editor-content :deep(.ProseMirror h3) { margin: 16px 0 10px; font-size: 1.2em; }
+.editor-content :deep(.ProseMirror ul:not([data-type='taskList'])) { margin: 0 0 12px; padding-left: 26px; list-style-type: disc; }
+.editor-content :deep(.ProseMirror ol) { margin: 0 0 12px; padding-left: 26px; list-style-type: decimal; }
+.editor-content :deep(.ProseMirror ul:not([data-type='taskList']) ul) { list-style-type: circle; }
+.editor-content :deep(.ProseMirror ol ol) { list-style-type: lower-alpha; }
+.editor-content :deep(.ProseMirror li) { margin: 3px 0; }
+.editor-content :deep(.ProseMirror blockquote) { margin: 12px 0; padding-left: 14px; border-left: 3px solid var(--line-strong); color: var(--text-secondary); }
+.editor-content :deep(.ProseMirror pre) { overflow-x: auto; margin: 12px 0; padding: 12px; border-radius: 8px; background: var(--surface-raised); font: 13px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.editor-content :deep(.ProseMirror code) { padding: 2px 4px; border-radius: 4px; background: var(--surface-raised); font: 0.9em ui-monospace, SFMono-Regular, Consolas, monospace; }
+.editor-content :deep(.ProseMirror pre code) { padding: 0; background: transparent; }
+.editor-content :deep(.ProseMirror hr) { margin: 18px 0; border: 0; border-top: 1px solid var(--line); }
 .editor-content :deep(.ProseMirror a) { color: var(--accent); text-decoration: underline; }
 .editor-content :deep(.ProseMirror img) { display: block; max-width: 100%; height: auto; margin: 12px 0; border-radius: 8px; }
 .editor-content :deep(ul[data-type='taskList']) { padding: 0; list-style: none; }
 .editor-content :deep(ul[data-type='taskList'] li) { display: flex; align-items: flex-start; gap: 8px; }
 .editor-content :deep(ul[data-type='taskList'] li > label) { margin-top: 6px; }
 .editor-content :deep(ul[data-type='taskList'] li > div) { flex: 1; }
+.markdown-source { display: block; width: 100%; min-height: 360px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; background: var(--surface); color: var(--text); font: 13px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.markdown-source:focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
 .editor-hint { margin: 18px 0 0; color: var(--text-secondary); font-size: 12px; }
 .panel-title { margin-bottom: 15px; color: var(--text); font-size: 15px; font-weight: 650; }
 .field { display: grid; gap: 5px; color: var(--text-secondary); font-size: 13px; }
@@ -733,5 +830,6 @@ function currentDue(): string {
   .editor-title-row h1 { font-size: 19px; }
   .editor-content { min-height: 260px; }
   .editor-content :deep(.ProseMirror) { min-height: 230px; }
+  .markdown-source { min-height: 260px; }
 }
 </style>

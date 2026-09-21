@@ -1,6 +1,6 @@
 {
   "name": "supercourse",
-  "version": "1.0.6",
+  "version": "1.1.3",
   "private": true,
   "type": "module",
   "description": "课序 —— 单人多端互通的个人课表与学习事务管理工具",
@@ -11,10 +11,11 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "powershell -NoProfile -File scripts/dev.ps1",
+    "dev": "node scripts/dev.mjs",
     "build": "npm run build --workspace @supercourse/web",
     "typecheck": "npm run typecheck --workspace @supercourse/web",
     "lint": "npm run lint --workspace @supercourse/web",
-    "test": "npm run test --workspace @supercourse/web"
+    "test": "npm run test --workspace @supercourse/web",
+    "check-all": "node scripts/check-all.mjs"
   }
 }

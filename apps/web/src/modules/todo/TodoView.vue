@@ -73,16 +73,20 @@ const hasTodos = computed(() => activeTodos.value.length > 0 || completedTodos.v
 
 let unsubscribeSync: (() => void) | null = null
 let undoTimer: ReturnType<typeof setTimeout> | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
-  unsubscribeSync = sync.subscribe((state) => {
-    if (state.lastSyncAt) void load()
+  unsubscribeSync = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['todo', 'course', 'term'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
   })
   void load()
 })
 
 onUnmounted(() => {
   unsubscribeSync?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
   if (undoTimer) clearTimeout(undoTimer)
 })
 
@@ -186,44 +190,56 @@ async function saveTodo() {
   }
   if (previous) {
     await sync.localWrite('todo', previous.id, fields, previous._rev)
+    Object.assign(previous, fields)
     message.value = '待办已保存'
   } else {
+    const id = crypto.randomUUID()
+    const createdAt = new Date().toISOString()
+    const createdFields = {
+      ...fields,
+      kind: 'todo',
+      body: '{}',
+      body_text: '',
+      start_at: null,
+      repeat: null,
+      remind_mode: form.remindEnabled ? 'inherit' : 'off',
+      remind_offsets: null,
+      sort_order: todos.value.length,
+      created_at: createdAt,
+    }
+    const created = {
+      ...createdFields,
+      id,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+    } as TodoRow
     await sync.localWrite(
       'todo',
-      crypto.randomUUID(),
-      {
-        ...fields,
-        kind: 'todo',
-        body: '{}',
-        body_text: '',
-        start_at: null,
-        repeat: null,
-        remind_mode: form.remindEnabled ? 'inherit' : 'off',
-        remind_offsets: null,
-        sort_order: todos.value.length,
-        created_at: new Date().toISOString(),
-      },
+      id,
+      createdFields,
       0,
     )
+    todos.value = [...todos.value, created]
     message.value = '待办已创建'
   }
   closeEditor()
-  await load()
 }
 
 async function toggleDone(todo: TodoRow) {
   clearFeedback()
   const status: TodoStatus = isDoneStatus(todo.status) ? '0' : '1'
-  await sync.localWrite('todo', todo.id, { status, done_at: doneValue(status, todo) }, todo._rev)
-  await load()
+  const doneAt = doneValue(status, todo)
+  await sync.localWrite('todo', todo.id, { status, done_at: doneAt }, todo._rev)
+  Object.assign(todo, { status, done_at: doneAt })
 }
 
 async function deleteTodo(todo: TodoRow) {
   if (!window.confirm(`确认删除「${todo.title}」吗？`)) return
   clearFeedback()
   await sync.localWrite('todo', todo.id, {}, todo._rev, true)
-  await load()
-  undoTodo.value = todo
+  undoTodo.value = { ...todo }
+  todo._deleted_at = new Date().toISOString()
   if (undoTimer) clearTimeout(undoTimer)
   undoTimer = setTimeout(() => { undoTodo.value = null }, 5000)
   message.value = '待办已删除'
@@ -233,9 +249,10 @@ async function undoDelete() {
   if (!undoTodo.value) return
   const deleted = undoTodo.value
   await sync.localWrite('todo', deleted.id, {}, deleted._rev, false)
+  const restored = todos.value.find((todo) => todo.id === deleted.id)
+  if (restored) restored._deleted_at = null
   undoTodo.value = null
   if (undoTimer) clearTimeout(undoTimer)
-  await load()
   message.value = '已撤销删除'
 }
 
@@ -254,10 +271,12 @@ async function dropTodo(target: TodoRow) {
   const [moved] = ordered.splice(from, 1)
   ordered.splice(to, 0, moved)
   for (const [index, todo] of ordered.entries()) {
-    if (todo.sort_order !== index) await sync.localWrite('todo', todo.id, { sort_order: index }, todo._rev)
+    if (todo.sort_order !== index) {
+      await sync.localWrite('todo', todo.id, { sort_order: index }, todo._rev)
+      todo.sort_order = index
+    }
   }
   sortMode.value = 'manual'
-  await load()
 }
 
 function courseLabel(courseId: string | null): string {

@@ -95,15 +95,21 @@ const slotOptions = computed(() =>
 )
 
 let unsubscribeSync: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
-  unsubscribeSync = sync.subscribe((state) => {
-    if (state.lastSyncAt) void load()
+  unsubscribeSync = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['term', 'course', 'course_slot', 'timetable_override', 'setting'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
   })
   void load()
 })
 
-onUnmounted(() => unsubscribeSync?.())
+onUnmounted(() => {
+  unsubscribeSync?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
+})
 
 async function load() {
   terms.value = (await db.term.toArray()).filter((term) => !term._deleted_at)
@@ -162,10 +168,11 @@ async function makeCurrent(term: TermRow) {
   for (const item of terms.value) {
     if (item.id === term.id && item.is_current === 1 && !item.archived_at) continue
     if (item.is_current === 1 || item.id === term.id) {
-      await sync.localWrite('term', item.id, { is_current: item.id === term.id ? 1 : 0, archived_at: item.id === term.id ? null : item.archived_at }, item._rev)
+      const fields = { is_current: item.id === term.id ? 1 : 0, archived_at: item.id === term.id ? null : item.archived_at }
+      await sync.localWrite('term', item.id, fields, item._rev)
+      Object.assign(item, fields)
     }
   }
-  await load()
   selectedTermId.value = term.id
   appStore.setSelectedTerm(term.id)
   message.value = `已切换到「${term.name}」`
@@ -180,12 +187,14 @@ async function saveTerm() {
   }
   const existing = activeTerm.value
   if (existing) {
+    const fields = { name, label: termForm.label.trim() || null, start_date: termForm.startDate, weeks_total: termForm.weeksTotal }
     await sync.localWrite(
       'term',
       existing.id,
-      { name, label: termForm.label.trim() || null, start_date: termForm.startDate, weeks_total: termForm.weeksTotal },
+      fields,
       existing._rev,
     )
+    Object.assign(existing, fields)
     message.value = '学期设置已保存'
   } else {
     const id = crypto.randomUUID()
@@ -193,26 +202,34 @@ async function saveTerm() {
     if (shouldCurrent) {
       for (const item of terms.value.filter((item) => item.is_current === 1)) {
         await sync.localWrite('term', item.id, { is_current: 0 }, item._rev)
+        item.is_current = 0
       }
+    }
+    const fields = {
+      name,
+      label: termForm.label.trim() || null,
+      start_date: termForm.startDate,
+      weeks_total: termForm.weeksTotal,
+      is_current: shouldCurrent ? 1 : 0,
+      archived_at: null,
     }
     await sync.localWrite(
       'term',
       id,
-      {
-        name,
-        label: termForm.label.trim() || null,
-        start_date: termForm.startDate,
-        weeks_total: termForm.weeksTotal,
-        is_current: shouldCurrent ? 1 : 0,
-        archived_at: null,
-      },
+      fields,
       0,
     )
+    terms.value = [...terms.value, {
+      id,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+      ...fields,
+    }]
     selectedTermId.value = id
     appStore.setSelectedTerm(id)
     message.value = '新学期已创建'
   }
-  await load()
 }
 
 async function archiveCurrentTerm() {
@@ -224,9 +241,12 @@ async function archiveCurrentTerm() {
     return
   }
   clearFeedback()
-  await sync.localWrite('term', term.id, { is_current: 0, archived_at: new Date().toISOString() }, term._rev)
-  await sync.localWrite('term', fallback.id, { is_current: 1, archived_at: null }, fallback._rev)
-  await load()
+  const archivedFields = { is_current: 0, archived_at: new Date().toISOString() }
+  const currentFields = { is_current: 1, archived_at: null }
+  await sync.localWrite('term', term.id, archivedFields, term._rev)
+  await sync.localWrite('term', fallback.id, currentFields, fallback._rev)
+  Object.assign(term, archivedFields)
+  Object.assign(fallback, currentFields)
   selectedTermId.value = fallback.id
   appStore.setSelectedTerm(fallback.id)
   message.value = `已归档「${term.name}」，当前学期切换为「${fallback.name}」`
@@ -281,28 +301,46 @@ async function saveCourse() {
   const existing = editingCourseId.value ? courses.value.find((item) => item.id === editingCourseId.value) : null
   if (existing) {
     await sync.localWrite('course', existing.id, fields, existing._rev)
+    Object.assign(existing, fields)
     message.value = '课程资料已保存'
   } else {
+    const id = crypto.randomUUID()
+    const created = {
+      id,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+      ...fields,
+      term_id: term.id,
+      sort_order: activeCourses.value.length,
+      exam_at: null,
+      exam_room: null,
+      exam_note: null,
+      textbook: null,
+      grade_breakdown: null,
+      note: null,
+    } as CourseRow
     await sync.localWrite(
       'course',
-      crypto.randomUUID(),
+      id,
       { ...fields, term_id: term.id, sort_order: activeCourses.value.length },
       0,
     )
+    courses.value = [...courses.value, created]
     message.value = '课程已创建，可再到课表页添加上课安排'
   }
   resetCourseForm()
-  await load()
 }
 
 async function archiveCourse(course: CourseRow) {
   if (!window.confirm(`确认归档「${course.name}」吗？它的课程格也会隐藏，但同步墓碑仍会保留。`)) return
   clearFeedback()
   await sync.localWrite('course', course.id, {}, course._rev, true)
+  course._deleted_at = new Date().toISOString()
   for (const slot of activeSlots.value.filter((item) => item.course_id === course.id)) {
     await sync.localWrite('course_slot', slot.id, {}, slot._rev, true)
+    slot._deleted_at = new Date().toISOString()
   }
-  await load()
   message.value = '课程已归档'
 }
 
@@ -368,19 +406,27 @@ async function saveOverride() {
     : null
   if (existing) {
     await sync.localWrite('timetable_override', existing.id, fields, existing._rev)
+    Object.assign(existing, fields)
     message.value = '单次覆盖已更新'
   } else {
-    await sync.localWrite('timetable_override', crypto.randomUUID(), fields, 0)
+    const id = crypto.randomUUID()
+    await sync.localWrite('timetable_override', id, fields, 0)
+    overrides.value = [...overrides.value, {
+      id,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+      ...fields,
+    } as TimetableOverrideRow]
     message.value = '单次覆盖已保存'
   }
   resetOverrideForm()
-  await load()
 }
 
 async function removeOverride(item: TimetableOverrideRow) {
   if (!window.confirm(`删除 ${item.day} 的单次覆盖吗？`)) return
   await sync.localWrite('timetable_override', item.id, {}, item._rev, true)
-  await load()
+  item._deleted_at = new Date().toISOString()
   message.value = '单次覆盖已删除'
 }
 

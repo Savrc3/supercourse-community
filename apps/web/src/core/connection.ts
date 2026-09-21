@@ -62,7 +62,7 @@ export function isLocalMode(): boolean {
 export function isSafeRemoteUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' || ['localhost', 'localhost'].includes(url.hostname)
+    return url.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(url.hostname)
   } catch {
     return false
   }

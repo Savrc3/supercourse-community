@@ -1,0 +1,13 @@
+# 旧版配置参考。当前运行配置使用 server/.env 的 SC_* 环境变量。
+data_dir = "./data"
+log_level = "INFO"
+host = "127.0.0.1"          # 生产只监听回环，公网经 nginx 反代
+port = 8090
+tombstone_days = 60
+media_max_bytes = 6291456   # 单图上限 6MB，服务端还会二次压缩
+
+[qq]
+enabled = false
+onebot_url = "http://127.0.0.1:3000"   # NapCat OneBot HTTP
+onebot_token = ""                      # NapCat Bearer token，仅放服务器环境变量
+target_user_id = 0                     # 你的 QQ 号，勿提交真实值

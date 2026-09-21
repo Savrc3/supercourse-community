@@ -18,12 +18,12 @@ from app.core.auth import CurrentDeviceId
 from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.journal import next_rev, now_iso
+from app.core.media_rules import ID_RE, media_file_path
 from app.models import Media
 
 router = APIRouter(tags=["media"])
 Db = Annotated[Session, Depends(get_session)]
 
-_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
 _MIME_TO_FORMAT = {
     "image/jpeg": ("jpg", "JPEG"),
     "image/png": ("png", "PNG"),
@@ -48,7 +48,7 @@ async def upload_media(
     file: Annotated[UploadFile, File()],
 ) -> dict[str, Any]:
     """上传一张图片；文件本体不进入同步日志，元数据进入 media 表。"""
-    if not _ID_RE.fullmatch(id):
+    if not ID_RE.fullmatch(id):
         raise _bad("invalid_id", "媒体 ID 格式无效")
     if not re.fullmatch(r"[0-9a-f]{64}", sha256):
         raise _bad("invalid_sha256", "sha256 格式无效")
@@ -141,7 +141,15 @@ def get_media(
 
 
 def _media_path(media_id: str, ext: str) -> Path:
-    path = get_settings().media_dir / f"{media_id}.{ext}"
+    """media 目录内的文件路径；id/ext 非法或越界时直接 400。
+
+    ``id``/``ext`` 可能来自同步 op 或备份恢复，一旦被拼进路径就是任意文件
+    读写（``../../app.db``）。这里做最后一道兜底：即使库里已有脏行，也读不到
+    media 目录之外的文件。
+    """
+    path = media_file_path(get_settings().media_dir, media_id, ext)
+    if path is None:
+        raise _bad("invalid_media_path", "媒体文件路径无效")
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 

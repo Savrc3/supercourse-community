@@ -1,5 +1,5 @@
 import type { CourseRow, CourseSlotRow, LessonPeriodRow, TermRow, TodoRow } from '../../db/db'
-import { currentWeek, parseWeeks, slotInWeek } from '../timetable/derive'
+import { currentWeek, inTermRange, parseWeeks, slotInWeek } from '../timetable/derive'
 
 export type ReminderChannel = 'qq' | 'mobile' | 'windows'
 export type ReminderKind = 'todo' | 'class'
@@ -90,8 +90,10 @@ export function calculateClassReminderTimes(
   const result: ClassReminderTime[] = []
   for (let dayIndex = 0; dayIndex < 56; dayIndex += 1) {
     const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayIndex)
-    const week = currentWeek(term.start_date, isoDate(day), term.weeks_total)
-    if (week < 1 || week > term.weeks_total) continue
+    const dayIso = isoDate(day)
+    // 学期区间外的日期直接跳过：currentWeek 会钳制，不能用它判断是否在学期内。
+    if (!inTermRange(term.start_date, dayIso, term.weeks_total)) continue
+    const week = currentWeek(term.start_date, dayIso, term.weeks_total)
     for (const slot of slots) {
       const weekday = day.getDay() === 0 ? 7 : day.getDay()
       if (slot._deleted_at || slot.weekday !== weekday) continue
@@ -112,21 +114,41 @@ function isoDate(value: Date): string {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
 
-export function parseOffsetsText(input: string): string[] {
-  return [...new Set(input.split(/[,，\s]+/).map((value) => value.trim()).filter((value) => parseIsoDuration(value) !== null))]
+/** 把提前量（毫秒）渲染成人类可读文本。 */
+export function formatLeadDuration(ms: number): string {
+  const seconds = Math.max(Math.round(Math.abs(ms) / 1000), 1)
+  if (seconds % 86400 === 0 && seconds >= 86400) return `${seconds / 86400} 天`
+  if (seconds % 3600 === 0 && seconds >= 3600) return `${seconds / 3600} 小时`
+  return `${Math.max(Math.round(seconds / 60), 1)} 分钟`
 }
 
-export function encodeOffsets(input: string): string {
-  return JSON.stringify(parseOffsetsText(input))
+/** 把 ISO 时长偏移转成人类可读的提前量（"-P1D" → "1 天"，"-PT15M" → "15 分钟"）。 */
+export function formatLeadTime(offset: string): string {
+  const ms = parseIsoDuration(offset)
+  return ms === null ? offset : formatLeadDuration(ms)
+}
+
+function normalizeOffsets(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return [...fallback]
+  const offsets = value.filter((item): item is string => typeof item === 'string' && parseIsoDuration(item) !== null)
+  return offsets.length > 0 ? offsets : [...fallback]
 }
 
 export function mergeReminderConfig(value: unknown): ReminderConfig {
-  const stored = (value && typeof value === 'object' ? value : {}) as { channels?: Record<string, ReminderChannel[]> }
+  const stored = (value && typeof value === 'object' ? value : {}) as {
+    channels?: Record<string, ReminderChannel[]>
+    defaults?: Record<string, string[]>
+  }
   const legacy = stored.channels ?? {}
   const todoChannels = Array.isArray(legacy.todo) ? legacy.todo : DEFAULT_REMINDER_CONFIG.channels.todo
   const classChannels = Array.isArray(legacy.class) ? legacy.class : todoChannels
+  // 服务端存的是用户改过的提醒设置，defaults 必须保留——只认 channels 会让
+  // 用户自定义的提前量在每次重载后被默认值覆盖。
   return {
-    defaults: { ...DEFAULT_REMINDER_CONFIG.defaults },
+    defaults: {
+      todo: normalizeOffsets(stored.defaults?.todo, DEFAULT_REMINDER_CONFIG.defaults.todo),
+      class: normalizeOffsets(stored.defaults?.class, DEFAULT_REMINDER_CONFIG.defaults.class),
+    },
     channels: { todo: todoChannels, class: classChannels },
   }
 }

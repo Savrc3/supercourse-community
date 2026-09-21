@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: false,
   use: {
-    baseURL: `http://localhost:${e2ePort}`,
+    baseURL: `http://127.0.0.1:${e2ePort}`,
     trace: 'off',
   },
   projects: [
@@ -17,8 +17,8 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
   ],
   webServer: {
-    command: `npm run preview --workspace @supercourse/web -- --host localhost --port ${e2ePort}`,
-    url: `http://localhost:${e2ePort}`,
+    command: `npm run preview --workspace @supercourse/web -- --host 127.0.0.1 --port ${e2ePort}`,
+    url: `http://127.0.0.1:${e2ePort}`,
     reuseExistingServer: true,
     timeout: 60_000,
   },

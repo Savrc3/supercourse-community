@@ -2,6 +2,8 @@ import { db } from '../db/db'
 import {
   calculateClassReminderTimes,
   calculateReminderTimes,
+  formatLeadDuration,
+  formatLeadTime,
   mergeReminderConfig,
   type ReminderConfig,
 } from '../modules/todo/reminder'
@@ -92,9 +94,15 @@ export async function startLocalReminderScheduler(): Promise<() => void> {
       const timer = window.setTimeout(() => {
         if (stopped) return
         if (item.type === 'todo') {
-          void showSystemNotification(`课序：${item.todo.title}`, `${item.todo.course_id ? '课程待办' : '杂事'} · 提前一天提醒`, item.todo.id)
+          void showSystemNotification(
+            `课序：${item.todo.title}`,
+            `${item.todo.course_id ? '课程待办' : '杂事'} · 提前 ${formatLeadTime(item.offset)}提醒`,
+            item.todo.id,
+          )
         } else {
-          void showSystemNotification(`上课提醒：${item.courseName}`, `${item.room ? `${item.room} · ` : ''}15 分钟后开始`)
+          // 文案跟着配置的提前量走，不再写死「15 分钟」。
+          const lead = formatLeadDuration(item.startsAt.getTime() - item.fireAt.getTime())
+          void showSystemNotification(`上课提醒：${item.courseName}`, `${item.room ? `${item.room} · ` : ''}${lead}后开始`)
         }
         timers.delete(key)
       }, delay)

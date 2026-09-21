@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.journal import current_rev, now_iso
 from app.sync.registry import REGISTRY, get_spec
+from app.sync.tombstones import tombstone_floor
 
 
 def _fetch_changes(
@@ -43,9 +44,12 @@ def build_changes(
 ) -> dict[str, Any]:
     """构造 /api/sync/changes 响应。
 
-    full=True 时走全量快照（bootstrap 复用）。游标过旧由调用方判断 tombstone_floor。
+    full=True 时走全量快照（bootstrap 复用）。游标低于墓碑水位线时（说明它可能
+    错过了已被清掉的删除记录）自动升级为全量快照，客户端据此重建本地库。
     """
     latest = current_rev(session)
+    if not full and since < tombstone_floor(session):
+        full = True
     if full:
         snapshot: dict[str, list[dict[str, Any]]] = {}
         for entity, spec in REGISTRY.items():

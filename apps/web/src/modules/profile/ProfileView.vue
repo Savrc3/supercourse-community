@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 
-import { checkForAppUpdate, downloadAndInstallAndroidUpdate } from '../../core/app-update'
+import { checkForAppUpdate, openAppUpdate } from '../../core/app-update'
 import { apiFetch } from '../../core/http'
 import { sync } from '../../core/sync'
 
@@ -27,6 +27,7 @@ const updateUrl = ref<string | null>(null)
 const updateMessage = ref('')
 const checkingUpdate = ref(false)
 const installingUpdate = ref(false)
+const isDesktopApp = typeof window !== 'undefined' && Boolean((window as Window & { desktop?: { appVersion?: string } }).desktop?.appVersion)
 
 async function loadDevices() {
   try {
@@ -95,7 +96,9 @@ async function checkUpdate() {
     latestVersion.value = result.latest
     updateUrl.value = result.url
     updateMessage.value = result.available
-      ? result.url ? '发现新版本，可以下载安装。' : '发现新版本，但服务器尚未配置 APK 下载地址。'
+      ? result.url
+        ? isDesktopApp ? '发现新版本，点击按钮打开下载页。' : '发现新版本，可以下载安装。'
+        : isDesktopApp ? '发现新版本，但服务器尚未配置 Windows 安装包地址。' : '发现新版本，但服务器尚未配置 APK 下载地址。'
       : '当前已是最新版本。'
   } catch {
     updateMessage.value = '版本检查失败，请联网后重试。'
@@ -107,10 +110,10 @@ async function checkUpdate() {
 async function installUpdate() {
   if (!updateUrl.value) return
   installingUpdate.value = true
-  updateMessage.value = '正在下载更新…'
+  updateMessage.value = isDesktopApp ? '正在打开下载页…' : '正在下载更新…'
   try {
-    await downloadAndInstallAndroidUpdate(updateUrl.value)
-    updateMessage.value = '已交给系统安装器，请按提示完成更新。'
+    await openAppUpdate(updateUrl.value)
+    updateMessage.value = isDesktopApp ? '下载页已打开，请下载并运行 Windows 安装包。' : '已交给系统安装器，请按提示完成更新。'
   } catch {
     updateMessage.value = '下载或打开安装器失败，请稍后重试。'
   } finally {
@@ -211,7 +214,7 @@ onMounted(() => {
           class="primary-btn"
           :disabled="installingUpdate"
           @click="installUpdate"
-        >{{ installingUpdate ? '下载中…' : '下载安装' }}</button>
+        >{{ installingUpdate ? (isDesktopApp ? '打开中…' : '下载中…') : (isDesktopApp ? '打开下载页' : '下载安装') }}</button>
       </div>
       <p
         v-if="updateMessage"

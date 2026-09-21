@@ -85,9 +85,47 @@ export function weekDates(termStart: string, week: number): { monday: string; su
 export function currentWeek(termStart: string, today: string, weeksTotal: number): number {
   const base = parseISO(termStart)
   const now = parseISO(today)
-  const diffDays = Math.floor((now.getTime() - base.getTime()) / 86400000)
+  // 用日历日差而不是毫秒差：夏令时切换当天本地「一天」不是 86400000 毫秒，
+  // 毫秒除法会在跨 DST 后把周次少算一周（中国无 DST，但客户端时区不一定）。
+  const diffDays = Math.round(dayNumber(now) - dayNumber(base))
   const week = Math.floor(diffDays / 7) + 1
   return Math.max(1, Math.min(week, weeksTotal))
+}
+
+/** 本地年月日 → 稳定的一天序号（以 UTC 表示本地日历日，不受 DST 时长影响）。 */
+function dayNumber(d: Date): number {
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
+}
+
+/** 日期是否落在学期区间内（第一周周一 ~ 最后一周周日）。
+ *
+ * currentWeek 会把区间外的日期钳制到 1/weeks_total，因此不能用
+ * 「week < 1 || week > weeks_total」判断是否在学期内：那恒为假，
+ * 寒暑假与开学前会照常触发上课提醒。
+ */
+export function inTermRange(termStart: string, today: string, weeksTotal: number): boolean {
+  const base = parseISO(termStart)
+  const day = parseISO(today)
+  if (Number.isNaN(base.getTime()) || Number.isNaN(day.getTime())) return false
+  const last = addDays(base, Math.max(weeksTotal, 0) * 7 - 1)
+  return day.getTime() >= base.getTime() && day.getTime() <= last.getTime()
+}
+
+/** 按本地日期移动若干天，返回 YYYY-MM-DD。 */
+export function shiftISODate(isoDate: string, days: number): string {
+  return toISO(addDays(parseISO(isoDate), days))
+}
+
+/** 把 JavaScript 的星期日 0 转换成课表使用的星期日 7。 */
+export function weekdayOfISO(isoDate: string): number {
+  const weekday = parseISO(isoDate).getDay()
+  return weekday === 0 ? 7 : weekday
+}
+
+/** 判断日期是否落在学期覆盖的完整周范围内。 */
+export function isDateInTerm(termStart: string, weeksTotal: number, date: string): boolean {
+  const { sunday } = weekDates(termStart, weeksTotal)
+  return date >= termStart && date <= sunday
 }
 
 /** 修复旧版演示学期的错误起始日；其它用户学期保持原值。 */

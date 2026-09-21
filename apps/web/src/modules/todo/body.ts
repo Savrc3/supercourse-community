@@ -1,4 +1,6 @@
 import type { JSONContent } from '@tiptap/core'
+import { defaultMarkdownParser, defaultMarkdownSerializer, MarkdownParser, MarkdownSerializer } from 'prosemirror-markdown'
+import type { Schema } from 'prosemirror-model'
 
 export const EMPTY_TODO_DOC: JSONContent = {
   type: 'doc',
@@ -47,4 +49,94 @@ export function sanitizeTodoBody(doc: JSONContent): JSONContent {
 
 export function todoBodyText(editorText: string): string {
   return editorText.trim()
+}
+
+const MARKDOWN_NAME_MAP: Record<string, string> = {
+  bullet_list: 'bulletList',
+  code_block: 'codeBlock',
+  hard_break: 'hardBreak',
+  hardbreak: 'hardBreak',
+  hr: 'horizontalRule',
+  horizontal_rule: 'horizontalRule',
+  list_item: 'listItem',
+  ordered_list: 'orderedList',
+  em: 'italic',
+  strong: 'bold',
+}
+
+const markdownTokens = Object.fromEntries(
+  Object.entries(defaultMarkdownParser.tokens).map(([name, spec]) => [
+    name,
+    {
+      ...spec,
+      ...(spec.block ? { block: MARKDOWN_NAME_MAP[spec.block] ?? spec.block } : {}),
+      ...(spec.node ? { node: MARKDOWN_NAME_MAP[spec.node] ?? spec.node } : {}),
+      ...(spec.mark ? { mark: MARKDOWN_NAME_MAP[spec.mark] ?? spec.mark } : {}),
+    },
+  ]),
+)
+
+const markdownNodes = Object.fromEntries(
+  Object.entries(defaultMarkdownSerializer.nodes).map(([name, serializer]) => [
+    MARKDOWN_NAME_MAP[name] ?? name,
+    serializer,
+  ]),
+)
+
+const markdownMarks = Object.fromEntries(
+  Object.entries(defaultMarkdownSerializer.marks).map(([name, serializer]) => [
+    MARKDOWN_NAME_MAP[name] ?? name,
+    serializer,
+  ]),
+)
+
+/** 将常用 Markdown 解析为当前 Tiptap schema 可保存的 JSON。 */
+export function markdownToTodoBody(markdown: string, schema: Schema): JSONContent {
+  const parser = new MarkdownParser(schema, defaultMarkdownParser.tokenizer, markdownTokens)
+  return sanitizeTodoBody(promoteTaskLists(parser.parse(markdown).toJSON() as JSONContent))
+}
+
+/** 将 Tiptap JSON 转成 Markdown 源码；不保证保留原始排版，只保证语义尽量保留。 */
+export function todoBodyToMarkdown(doc: JSONContent, schema: Schema): string {
+  const node = schema.nodeFromJSON(sanitizeTodoBody(doc))
+  const serializer = new MarkdownSerializer(
+    {
+      ...markdownNodes,
+      bulletList: (state, current) => state.renderList(current, '  ', () => '- '),
+      taskList: (state, current) => state.renderList(current, '  ', () => '- '),
+      taskItem: (state, current) => {
+        state.write(current.attrs?.checked ? '[x] ' : '[ ] ')
+        state.renderContent(current)
+      },
+    },
+    markdownMarks,
+    { strict: false },
+  )
+  return serializer.serialize(node, { tightLists: true }).trim()
+}
+
+/** CommonMark 本身会把任务清单当普通列表，这里恢复为 Tiptap 的任务清单节点。 */
+function promoteTaskLists(node: JSONContent): JSONContent {
+  const next: JSONContent = { ...node }
+  if (next.content) next.content = next.content.map(promoteTaskLists)
+  if (next.type !== 'bulletList' || !next.content?.length) return next
+
+  const taskItems = next.content.map((item) => {
+    if (item.type !== 'listItem' || !item.content?.[0] || item.content[0].type !== 'paragraph') return null
+    const paragraph = item.content[0]
+    const firstText = paragraph.content?.find((child) => child.type === 'text')
+    const match = firstText?.text?.match(/^\[([ xX])\]\s?/)
+    if (!firstText || !match) return null
+    const text = firstText.text?.slice(match[0].length)
+    const content = paragraph.content
+      ?.map((child) => child === firstText ? { ...child, text } : child)
+      .filter((child) => child.type !== 'text' || Boolean(child.text))
+    return {
+      type: 'taskItem',
+      attrs: { checked: match[1].toLowerCase() === 'x' },
+      content: [{ ...paragraph, content }, ...item.content.slice(1)],
+    }
+  })
+
+  return taskItems.every(Boolean) ? { ...next, type: 'taskList', content: taskItems as JSONContent[] } : next
 }

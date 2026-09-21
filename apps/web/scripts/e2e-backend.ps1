@@ -9,5 +9,5 @@ $env:SC_DATA_DIR = $dataDir
 & ".\.venv\Scripts\python.exe" -m scripts.e2e_init
 if ($LASTEXITCODE -ne 0) { Write-Host "e2e_init failed"; exit $LASTEXITCODE }
 # 前台运行 uvicorn（阻塞，Playwright webServer 认为后端进程存活直到 kill）。
-& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --host localhost --port 8090
+& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8090
 Pop-Location

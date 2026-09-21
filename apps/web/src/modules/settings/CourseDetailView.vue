@@ -35,11 +35,14 @@ const doneTodos = computed(() => todos.value.filter((todo) => !todo._deleted_at 
 const rooms = computed(() => [...new Set(slots.value.map((slot) => slot.room).filter(Boolean))].join('、'))
 
 let unsubscribeSync: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 const localMediaSources = new Map<string, string>()
 
 onMounted(() => {
-  unsubscribeSync = sync.subscribe((state) => {
-    if (state.lastSyncAt && !editing.value) void load()
+  unsubscribeSync = sync.subscribeChanges((changes) => {
+    if (editing.value || !changes.some(({ entity }) => ['course', 'course_slot', 'todo', 'attachment', 'media'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
   })
   void load()
 })
@@ -77,6 +80,7 @@ async function resolveMediaSource(media: MediaRow | undefined) {
 
 onUnmounted(() => {
   unsubscribeSync?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
   revokeLocalMediaSources()
 })
 

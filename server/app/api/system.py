@@ -47,5 +47,6 @@ def version() -> dict[str, Any]:
         "web": APP_VERSION,
         "android": APP_VERSION,
         "android_url": settings.android_update_url,
-        "desktop": None,
+        "desktop": APP_VERSION,
+        "desktop_url": settings.desktop_update_url,
     }

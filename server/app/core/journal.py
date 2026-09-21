@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.models import Seq
@@ -19,25 +21,77 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def parse_iso(value: str | None) -> datetime | None:
+    """把 ISO8601 时间戳解析为带时区的 datetime；不可解析返回 None。
+
+    用于比较客户端与服务端的 ``updated_at``：字符串比较在不同时区偏移
+    下会给出错误结果（``+08:00`` 与 ``Z`` 混用）。
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def latest_iso(*values: str | None) -> str:
+    """返回若干个 ISO8601 时间戳中最新者；全部不可用时返回当前时间。
+
+    用于「行最后写入时间」：合并后不应把行的 ``updated_at`` 回退到旧值，
+    否则后续 LWW 判断会用到过期时间。
+    """
+    best: datetime | None = None
+    best_raw: str | None = None
+    for raw in values:
+        parsed = parse_iso(raw)
+        if parsed is None:
+            continue
+        if best is None or parsed > best:
+            best = parsed
+            best_raw = raw
+    return best_raw or now_iso()
+
+
+def _ensure_seq_row(session: Session) -> None:
+    """确保 ``seq`` 单行存在（并发首写也不会撞 ``uq_seq_k``）。"""
+    session.execute(
+        sqlite_insert(Seq).values(k=1, v=0).on_conflict_do_nothing(index_elements=["k"])
+    )
+
+
 def next_rev(session: Session) -> int:
     """取下一个全局 rev（单调 +1），并持久化到单行 ``seq``。
 
-    并发安全：由 SQLite 单写锁 + ``busy_timeout`` 保证不重复分配。
+    并发安全：自增在 SQL 层完成（``UPDATE ... SET v = v + 1``），两个并发
+    事务不会读到同一个旧值——Python 里 read-modify-write 会，表现为多台
+    设备同时同步后出现重复 rev，增量拉取按 ``rev > since`` 过滤时永久漏行。
     """
-    seq = session.get(Seq, 1)
-    if seq is None:
-        seq = Seq(k=1, v=0)
-        session.add(seq)
-        session.flush()
-    seq.v += 1
-    session.flush()
-    return seq.v
+    _ensure_seq_row(session)
+    session.execute(update(Seq).where(Seq.k == 1).values(v=Seq.v + 1))
+    value = session.scalar(select(Seq.v).where(Seq.k == 1))
+    return int(value or 1)
+
+
+def bump_rev_floor(session: Session, rev: int) -> None:
+    """把全局 seq 抬到至少 ``rev``。
+
+    备份恢复 / 导入回滚会把旧时间线的 rev 写回库；若不抬升 seq，后续
+    ``next_rev`` 会重新分配相同的 rev，破坏「全局单调时间线」前提。
+    """
+    if rev <= 0:
+        return
+    _ensure_seq_row(session)
+    session.execute(update(Seq).where(Seq.k == 1).values(v=func.max(Seq.v, rev)))
 
 
 def current_rev(session: Session) -> int:
     """最近一次已分配的 rev（未写入任何行时返回 0）。"""
-    seq = session.get(Seq, 1)
-    return seq.v if seq is not None else 0
+    value = session.scalar(select(Seq.v).where(Seq.k == 1))
+    return int(value or 0)
 
 
 def clamp_updated_at(updated_at: str | None, server_now: str | None = None) -> str:
@@ -49,15 +103,10 @@ def clamp_updated_at(updated_at: str | None, server_now: str | None = None) -> s
     if not updated_at:
         return now_iso()
     server = server_now or now_iso()
-    try:
-        ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
-        ref = datetime.fromisoformat(server.replace("Z", "+00:00"))
-    except ValueError:
+    ts = parse_iso(updated_at)
+    ref = parse_iso(server)
+    if ts is None or ref is None:
         return server
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    if ref.tzinfo is None:
-        ref = ref.replace(tzinfo=timezone.utc)
     if (ts - ref).total_seconds() > 60:
         return server
     return updated_at
@@ -75,9 +124,12 @@ def stamp_new_row(
 
 
 __all__ = [
-    "now_iso",
-    "next_rev",
-    "current_rev",
+    "bump_rev_floor",
     "clamp_updated_at",
+    "current_rev",
+    "latest_iso",
+    "next_rev",
+    "now_iso",
+    "parse_iso",
     "stamp_new_row",
 ]

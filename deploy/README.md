@@ -19,7 +19,16 @@
 
 请在外层反向代理提供 HTTPS，把 `SC_ALLOWED_ORIGINS` 改成实际前端来源，并保持 `SC_EXPOSE_HEALTH_DETAILS=false`。默认关闭 QQ 通知，只有部署者自己配置 OneBot 后才启用。
 
+挂了反向代理时，登录/配对限流默认只看 TCP 对端（反代后所有请求都是代理 IP，额度会被全局共享）。确定代理可信（只由它转发）时把 `SC_TRUST_PROXY_HEADERS=true`，限流改按 `X-Forwarded-For` 第一跳记账；**此时必须保证后端端口不直接对外**，否则客户端可以伪造该头绕过限流。请求体上限 `SC_MAX_REQUEST_BYTES`（默认 20MB）对分块请求同样生效。
+
 数据保存在 Docker 卷 `supercourse-data` 中。升级前执行 `docker compose ... down` 并备份该卷；不要把 `.env`、数据卷或备份提交到 Git。
+
+## 版本与更新
+
+`/api/version` 返回当前 `APP_VERSION` 与两个可选下载地址：`SC_ANDROID_UPDATE_URL`（Android 应用内更新的 APK 直链）
+与 `SC_DESKTOP_UPDATE_URL`（Windows 应用内更新的安装包直链）。两项留空时界面会明确提示「未配置」，不会给出失效按钮。
+升级部署时同步更新版本号与这两项，并确认地址返回 200。正式密钥签名的 APK 只由维护者在本地构建，
+流程见 `docs/交接开发手册.md` §13.1。
 
 ## 停止与升级
 

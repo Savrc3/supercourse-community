@@ -12,6 +12,16 @@ export interface AppUpdateInfo {
   available: boolean
 }
 
+interface DesktopBridge {
+  appVersion?: string
+  openExternal?: (url: string) => Promise<void> | void
+}
+
+function desktopBridge(): DesktopBridge | null {
+  if (typeof window === 'undefined') return null
+  return (window as Window & { desktop?: DesktopBridge }).desktop ?? null
+}
+
 export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
   const response = await apiFetch('/version', { cache: 'no-store' })
   if (!response.ok) throw new Error(`version check failed ${response.status}`)
@@ -20,10 +30,35 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
     web?: string | null
     android?: string | null
     android_url?: string | null
+    desktop?: string | null
+    desktop_url?: string | null
   }
-  const current = Capacitor.isNativePlatform() ? (await App.getInfo()).version : data.web ?? data.api ?? '未知'
-  const latest = Capacitor.isNativePlatform() ? data.android ?? data.api ?? current : data.web ?? data.api ?? current
-  return { current, latest, url: data.android_url ?? null, available: compareVersions(latest, current) > 0 }
+  const desktop = desktopBridge()
+  const native = Capacitor.isNativePlatform()
+  const current = native
+    ? (await App.getInfo()).version
+    : desktop?.appVersion ?? data.web ?? data.api ?? '未知'
+  const latest = native
+    ? data.android ?? data.api ?? current
+    : desktop?.appVersion
+      ? data.desktop ?? data.web ?? data.api ?? current
+      : data.web ?? data.api ?? current
+  const url = native ? data.android_url ?? null : desktop?.appVersion ? data.desktop_url ?? null : null
+  return { current, latest, url, available: compareVersions(latest, current) > 0 }
+}
+
+export async function openAppUpdate(url: string): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    await downloadAndInstallAndroidUpdate(url)
+    return
+  }
+  const desktop = desktopBridge()
+  if (desktop?.openExternal) {
+    await desktop.openExternal(url)
+    return
+  }
+  const opened = typeof window !== 'undefined' ? window.open(url, '_blank', 'noopener,noreferrer') : null
+  if (!opened) throw new Error('无法打开更新下载页')
 }
 
 export async function downloadAndInstallAndroidUpdate(url: string): Promise<void> {

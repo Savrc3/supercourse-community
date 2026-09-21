@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import {
   db,
@@ -19,11 +19,15 @@ import {
   canonicalTermStartDate,
   currentWeek,
   deriveBigPeriodRows,
+  isDateInTerm,
   mergeConsecutive,
+  shiftISODate,
   weekDates,
   weekHeader,
+  weekdayOfISO,
   type BigPeriodRow,
 } from './derive'
+import { detectHorizontalSwipe, type SwipePoint } from './swipe'
 
 const appStore = useAppStore()
 
@@ -34,6 +38,10 @@ const periods = ref<LessonPeriodRow[]>([])
 const overrides = ref<TimetableOverrideRow[]>([])
 const week = ref(1)
 const loaded = ref(false)
+// selectedDate 是用户当前正在查看的日期；actualToday 永远表示设备的真实今天。
+// 两者必须分开，否则查看其它星期会错误地把“今天”一起移动。
+const actualToday = ref(todayISO())
+const selectedDate = ref(actualToday.value)
 const editorOpen = ref(false)
 const editorMode = ref<'new' | 'edit'>('new')
 const editorError = ref('')
@@ -60,14 +68,34 @@ const PALETTE = [
   '#9E3A4A',
 ]
 
+let unsubscribeSync: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
+let midnightTimer: ReturnType<typeof setTimeout> | null = null
+let navigationDirectionTimer: ReturnType<typeof setTimeout> | null = null
+let swipeStart: SwipePoint | null = null
+let suppressNextClick = false
+let navigationTermId = ''
+const navigationDirection = ref<'next' | 'previous' | null>(null)
+
 onMounted(async () => {
+  refreshActualToday()
+  scheduleMidnightRefresh()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   await load()
-  // 同步完成后重新读库（sync 拉取是异步的，可能晚于组件挂载）。
-  sync.subscribe((s) => {
-    if (s.lastSyncAt) {
-      void load()
-    }
+  // 同步完成后只在相关实体真正变化时重新读库。
+  unsubscribeSync = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['term', 'course', 'course_slot', 'lesson_period', 'timetable_override'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
   })
+})
+
+onUnmounted(() => {
+  unsubscribeSync?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
+  if (midnightTimer) clearTimeout(midnightTimer)
+  if (navigationDirectionTimer) clearTimeout(navigationDirectionTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
 async function load() {
@@ -86,16 +114,148 @@ async function load() {
   periods.value = await db.lesson_period.toArray()
   overrides.value = await db.timetable_override.toArray()
   if (term.value) {
-    week.value = currentWeek(term.value.start_date, todayISO(), term.value.weeks_total)
+    if (navigationTermId !== term.value.id) initialiseNavigation()
+  } else {
+    navigationTermId = ''
   }
   loaded.value = true
 }
 
-const today = ref(todayISO())
-
 function todayISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function refreshActualToday() {
+  const previousToday = actualToday.value
+  const nextToday = todayISO()
+  actualToday.value = nextToday
+  if (
+    term.value &&
+    selectedDate.value === previousToday &&
+    isDateInTerm(term.value.start_date, term.value.weeks_total, nextToday)
+  ) {
+    selectedDate.value = nextToday
+    week.value = currentWeek(term.value.start_date, nextToday, term.value.weeks_total)
+  }
+}
+
+function scheduleMidnightRefresh() {
+  if (midnightTimer) clearTimeout(midnightTimer)
+  const nextMidnight = new Date()
+  nextMidnight.setHours(24, 0, 0, 0)
+  midnightTimer = setTimeout(() => {
+    refreshActualToday()
+    scheduleMidnightRefresh()
+  }, Math.max(1000, nextMidnight.getTime() - Date.now() + 1000))
+}
+
+function handleVisibilityChange() {
+  if (!document.hidden) refreshActualToday()
+}
+
+function initialDateForTerm(): string {
+  if (!term.value) return actualToday.value
+  if (isDateInTerm(term.value.start_date, term.value.weeks_total, actualToday.value)) return actualToday.value
+  const { sunday } = weekDates(term.value.start_date, term.value.weeks_total)
+  return actualToday.value < term.value.start_date ? term.value.start_date : sunday
+}
+
+function initialiseNavigation() {
+  if (!term.value) return
+  week.value = currentWeek(term.value.start_date, actualToday.value, term.value.weeks_total)
+  selectedDate.value = initialDateForTerm()
+  navigationTermId = term.value.id
+}
+
+const actualWeek = computed(() => {
+  if (!term.value) return 1
+  return currentWeek(term.value.start_date, actualToday.value, term.value.weeks_total)
+})
+
+function selectDate(date: string) {
+  if (!term.value || !isDateInTerm(term.value.start_date, term.value.weeks_total, date)) return
+  if (date !== selectedDate.value) setNavigationDirection(date > selectedDate.value ? 'next' : 'previous')
+  selectedDate.value = date
+  week.value = currentWeek(term.value.start_date, date, term.value.weeks_total)
+}
+
+function changeDay(offset: -1 | 1) {
+  if (!term.value) return
+  const nextDate = shiftISODate(selectedDate.value, offset)
+  if (!isDateInTerm(term.value.start_date, term.value.weeks_total, nextDate)) return
+  setNavigationDirection(offset > 0 ? 'next' : 'previous')
+  selectedDate.value = nextDate
+  week.value = currentWeek(term.value.start_date, nextDate, term.value.weeks_total)
+}
+
+function changeWeek(offset: -1 | 1) {
+  if (!term.value) return
+  const nextWeek = Math.min(Math.max(week.value + offset, 1), term.value.weeks_total)
+  if (nextWeek === week.value) return
+  setNavigationDirection(offset > 0 ? 'next' : 'previous')
+  week.value = nextWeek
+  const weekday = weekdayOfISO(selectedDate.value)
+  const nextDate = weekHeader(term.value.start_date, nextWeek)[weekday - 1]?.date
+  if (nextDate && isDateInTerm(term.value.start_date, term.value.weeks_total, nextDate)) {
+    selectedDate.value = nextDate
+  }
+}
+
+function goToToday() {
+  if (!term.value) return
+  if (selectedDate.value !== initialDateForTerm() || week.value !== actualWeek.value) {
+    setNavigationDirection(
+      selectedDate.value > initialDateForTerm() || week.value > actualWeek.value ? 'previous' : 'next',
+    )
+  }
+  selectedDate.value = initialDateForTerm()
+  week.value = actualWeek.value
+}
+
+function setNavigationDirection(direction: 'next' | 'previous' | null) {
+  if (navigationDirectionTimer) clearTimeout(navigationDirectionTimer)
+  navigationDirection.value = direction
+  if (direction) {
+    navigationDirectionTimer = setTimeout(() => {
+      navigationDirection.value = null
+      navigationDirectionTimer = null
+    }, 320)
+  }
+}
+
+function toggleView() {
+  setNavigationDirection(null)
+  appStore.mobileView = appStore.mobileView === 'day' ? 'week' : 'day'
+}
+
+function onSwipeStart(event: PointerEvent) {
+  if (editorOpen.value) return
+  swipeStart = { x: event.clientX, y: event.clientY }
+  suppressNextClick = false
+}
+
+function onSwipeEnd(event: PointerEvent) {
+  if (!swipeStart) return
+  const start = swipeStart
+  swipeStart = null
+  const direction = detectHorizontalSwipe(start, { x: event.clientX, y: event.clientY })
+  if (!direction) return
+  suppressNextClick = true
+  const offset = direction === 'next' ? 1 : -1
+  if (appStore.mobileView === 'day') changeDay(offset)
+  else changeWeek(offset)
+}
+
+function onSwipeCancel() {
+  swipeStart = null
+}
+
+function onSwipeClickCapture(event: MouseEvent) {
+  if (!suppressNextClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressNextClick = false
 }
 
 const activeTermId = computed(() => term.value?.id ?? '')
@@ -157,7 +317,7 @@ const dateRange = computed(() => {
   return `${monday} - ${sunday}`
 })
 
-const header = computed(() => weekHeader(term.value?.start_date ?? today.value, week.value))
+const header = computed(() => weekHeader(term.value?.start_date ?? actualToday.value, week.value))
 
 const weekBlocks = computed(() => displayBlocks.value)
 
@@ -182,7 +342,7 @@ const weekCourses = computed(() => {
 
 /** 单日视图：固定展示一天的各大节，并明确标出每节是有课还是空闲。 */
 const dayRows = computed(() => {
-  const weekday = header.value.find((item) => item.date === today.value)?.weekday ?? 1
+  const weekday = header.value.find((item) => item.date === selectedDate.value)?.weekday ?? weekdayOfISO(selectedDate.value)
   return bigRows.value.map((row) => ({
     ...row,
     courses: displayBlocks.value
@@ -275,7 +435,7 @@ function openNewEditor() {
   Object.assign(editorForm, {
     name: '',
     teacher: '',
-    weekday: header.value.find((item) => item.date === today.value)?.weekday ?? 1,
+    weekday: header.value.find((item) => item.date === selectedDate.value)?.weekday ?? weekdayOfISO(selectedDate.value),
     startLesson: 1,
     endLesson: 2,
     room: '',
@@ -333,6 +493,34 @@ async function saveEditor() {
   if (editorMode.value === 'new') {
     const courseId = crypto.randomUUID()
     const slotId = crypto.randomUUID()
+    const course: CourseRow = {
+      id: courseId,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+      term_id: term.value.id,
+      name,
+      short_name: null,
+      teacher: editorForm.teacher.trim() || null,
+      code: null,
+      color: courses.value.length % PALETTE.length,
+      credit: null,
+      exam_at: null,
+      exam_room: null,
+      exam_note: null,
+      textbook: null,
+      grade_breakdown: null,
+      note: null,
+      sort_order: courses.value.length,
+    }
+    const slot: CourseSlotRow = {
+      id: slotId,
+      _rev: 0,
+      _updated_at: null,
+      _deleted_at: null,
+      course_id: courseId,
+      ...slotSet,
+    }
     await sync.localWrite(
       'course',
       courseId,
@@ -348,6 +536,8 @@ async function saveEditor() {
       0,
     )
     await sync.localWrite('course_slot', slotId, { course_id: courseId, ...slotSet }, 0)
+    courses.value = [...courses.value, course]
+    slots.value = [...slots.value, slot]
   } else {
     const course = courseMap.value.get(editingCourseId.value)
     const slot = slots.value.find((item) => item.id === editingSlotId.value)
@@ -359,9 +549,10 @@ async function saveEditor() {
       course._rev,
     )
     await sync.localWrite('course_slot', slot.id, slotSet, slot._rev)
+    Object.assign(course, { name, teacher: editorForm.teacher.trim() || null })
+    Object.assign(slot, slotSet)
   }
   editorOpen.value = false
-  await load()
 }
 
 async function deleteEditorSlot() {
@@ -369,35 +560,40 @@ async function deleteEditorSlot() {
   const slot = slots.value.find((item) => item.id === editingSlotId.value)
   if (!slot || !window.confirm('确认删除这条课程安排吗？删除后仍可通过同步恢复。')) return
   await sync.localWrite('course_slot', slot.id, {}, slot._rev, true)
+  slot._deleted_at = new Date().toISOString()
   editorOpen.value = false
-  await load()
 }
 
 </script>
 
 <template>
-  <section class="timetable">
+  <section
+    class="timetable"
+    :class="{ 'is-day-view': appStore.mobileView === 'day' }"
+  >
     <header class="view-head">
-      <div>
+      <div class="view-head-main">
         <h1>课表</h1>
-        <p v-if="appStore.mobileView === 'day'">{{ today }} · 单日课表</p>
+        <p v-if="appStore.mobileView === 'day'">{{ selectedDate }} · 单日课表</p>
         <p v-else>第 {{ week }} 周 · {{ dateRange }}</p>
       </div>
-      <button
-        class="add-course-btn"
-        type="button"
-        :disabled="readOnly"
-        @click="openNewEditor"
-      >+ 添加课程</button>
-      <button
-        class="icon-btn"
-        :aria-label="appStore.mobileView === 'day' ? '切换周视图' : '切换单日视图'"
-        @click="appStore.mobileView = appStore.mobileView === 'day' ? 'week' : 'day'"
-      >
-        <span class="view-toggler">
-          {{ appStore.mobileView === 'day' ? '周' : '日' }}
-        </span>
-      </button>
+      <div class="view-head-actions">
+        <button
+          class="add-course-btn"
+          type="button"
+          :disabled="readOnly"
+          @click="openNewEditor"
+        >+ 添加课程</button>
+        <button
+          class="icon-btn"
+          :aria-label="appStore.mobileView === 'day' ? '切换周视图' : '切换单日视图'"
+          @click="toggleView"
+        >
+          <span class="view-toggler">
+            {{ appStore.mobileView === 'day' ? '周' : '日' }}
+          </span>
+        </button>
+      </div>
     </header>
 
     <div
@@ -410,7 +606,7 @@ async function deleteEditorSlot() {
       v-else-if="!term"
       class="empty-state"
     >
-              {{ isLocalMode() ? '还没有课表。请先添加课程，或在管理页导入本地备份。' : '还没有课表。请先登录并同步课表，或点右上角「添加课程」。' }}
+      {{ isLocalMode() ? '还没有课表。请先添加课程，或在管理页导入本地备份。' : '还没有课表。请先登录并同步课表，或点右上角「添加课程」。' }}
     </div>
 
     <nav
@@ -422,15 +618,21 @@ async function deleteEditorSlot() {
         class="week-btn"
         :disabled="week <= 1"
         aria-label="上一周"
-        @click="week > 1 && week--"
+        @click="changeWeek(-1)"
       >‹</button>
       <span class="week-label">第 {{ week }} 周</span>
       <button
         class="week-btn"
         :disabled="week >= (term?.weeks_total ?? 20)"
         aria-label="下一周"
-        @click="week < (term?.weeks_total ?? 20) && week++"
+        @click="changeWeek(1)"
       >›</button>
+      <button
+        v-if="week !== actualWeek"
+        class="today-link"
+        type="button"
+        @click="goToToday"
+      >回到今天</button>
     </nav>
 
     <template v-if="loaded && term">
@@ -438,125 +640,154 @@ async function deleteEditorSlot() {
         v-if="readOnly"
         class="readonly-note"
       >当前正在查看已归档学期，课表只读。</p>
-      <template v-if="appStore.mobileView === 'day'">
-        <nav
-          class="day-tabs"
-          aria-label="星期切换"
+      <Transition
+        :name="navigationDirection ? `timetable-swipe-${navigationDirection}` : 'timetable-view'"
+        mode="out-in"
+      >
+        <div
+          :key="`${appStore.mobileView}-${selectedDate}-${week}`"
+          class="timetable-swipe-panel"
+          :class="{ 'is-next': navigationDirection === 'next', 'is-previous': navigationDirection === 'previous' }"
         >
-          <button
-            v-for="h in header"
-            :key="h.weekday"
-            class="day-tab"
-            :class="{ active: h.date === today }"
-            :aria-current="h.date === today ? 'date' : undefined"
-            @click="today = h.date"
-          >
-            {{ h.label }}
-          </button>
-        </nav>
-        <div class="day-grid">
-          <article
-            v-for="row in dayRows"
-            :key="row.big"
-            class="day-period"
-          >
-            <div class="day-period-meta">
-              <strong>{{ row.big }}大节</strong>
-              <span>第{{ row.firstLesson }}-{{ row.lastLesson }}节</span>
-              <small>{{ row.start }}-{{ row.end }}</small>
-            </div>
-            <div class="day-period-content">
+          <template v-if="appStore.mobileView === 'day'">
+            <nav
+              class="day-tabs"
+              aria-label="星期切换"
+            >
+              <button
+                v-for="h in header"
+                :key="h.weekday"
+                class="day-tab"
+                :class="{ active: h.date === selectedDate, today: h.date === actualToday }"
+                :aria-current="h.date === actualToday ? 'date' : undefined"
+                :aria-pressed="h.date === selectedDate"
+                @click="selectDate(h.date)"
+              >
+                {{ h.label }}
+                <small
+                  v-if="h.date === actualToday"
+                  class="today-mark"
+                >今</small>
+              </button>
+            </nav>
+            <div
+              class="day-grid swipe-surface"
+              @pointerdown="onSwipeStart"
+              @pointerup="onSwipeEnd"
+              @pointercancel="onSwipeCancel"
+              @click.capture="onSwipeClickCapture"
+            >
               <article
-                v-for="course in row.courses"
-                :key="`${row.big}-${course.slotId}`"
-                class="day-course"
-                :style="{ borderLeftColor: course.color, background: colorMix(course.color) }"
-                role="button"
-                tabindex="0"
-                :aria-label="`编辑${course.displayName}`"
-                @click="openEditEditor(course.slotId)"
-                @keydown.enter="openEditEditor(course.slotId)"
+                v-for="row in dayRows"
+                :key="row.big"
+                class="day-period"
               >
-                <strong>{{ course.displayName }}</strong>
-                <span>{{ course.room || '未设置教室' }}</span>
-                <small>第{{ course.startLesson }}-{{ course.endLesson }}节</small>
+                <div class="day-period-meta">
+                  <strong>{{ row.big }}大节</strong>
+                  <span>第{{ row.firstLesson }}-{{ row.lastLesson }}节</span>
+                  <small>{{ row.start }}-{{ row.end }}</small>
+                </div>
+                <div class="day-period-content">
+                  <article
+                    v-for="course in row.courses"
+                    :key="`${row.big}-${course.slotId}`"
+                    class="day-course"
+                    :style="{ borderLeftColor: course.color, background: colorMix(course.color) }"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="`编辑${course.displayName}`"
+                    @click="openEditEditor(course.slotId)"
+                    @keydown.enter="openEditEditor(course.slotId)"
+                  >
+                    <strong>{{ course.displayName }}</strong>
+                    <span>{{ course.room || '未设置教室' }}</span>
+                    <small>第{{ course.startLesson }}-{{ course.endLesson }}节</small>
+                  </article>
+                  <span
+                    v-if="row.courses.length === 0"
+                    class="day-free"
+                  >空闲</span>
+                </div>
               </article>
-              <span
-                v-if="row.courses.length === 0"
-                class="day-free"
-              >空闲</span>
-            </div>
-          </article>
-          <div
-            v-if="dayRows.length === 0"
-            class="empty-state"
-          >
-            尚未配置作息时间
-          </div>
-        </div>
-      </template>
-
-      <template v-else>
-        <!-- 周视图：左侧大节时间轴 + 7 列网格，手机端也在一页展示整周 -->
-        <div class="week-grid">
-          <div class="week-head">
-            <span class="week-axis-head">时间</span>
-            <span
-              v-for="h in header"
-              :key="h.weekday"
-              class="week-head-cell"
-              :class="{ today: h.date === today }"
-            >
-              <b>周{{ h.label }}</b>
-              <small>{{ h.date.slice(5) }}</small>
-            </span>
-          </div>
-          <div
-            class="week-body"
-            :style="{ gridTemplateRows: `repeat(${bigRows.length}, minmax(72px, 1fr))` }"
-          >
-            <template
-              v-for="(row, rowIndex) in bigRows"
-              :key="row.big"
-            >
               <div
-                class="week-axis"
-                :style="{ gridColumn: 1, gridRow: rowIndex + 1 }"
+                v-if="dayRows.length === 0"
+                class="empty-state"
               >
-                <span class="axis-time">{{ row.start }}</span>
-                <span class="axis-label">{{ row.big }}大节</span>
+                尚未配置作息时间
               </div>
-              <span
-                v-for="(h, dayIndex) in header"
-                :key="`${row.big}-${h.weekday}`"
-                class="week-cell"
-                :class="{ today: h.date === today }"
-                :style="{ gridColumn: dayIndex + 2, gridRow: rowIndex + 1 }"
-              />
-            </template>
-            <!-- 课程块：跨行跨列定位 -->
-            <article
-              v-for="b in weekCourses"
-              :key="'wc-' + b.slotId"
-              class="week-course"
-              :style="{
-                gridColumn: (b.weekday + 1) + ' / span 1',
-                gridRow: (b.rowFrom + 1) + ' / ' + (b.rowTo + 2),
-                borderLeftColor: b.color,
-                background: colorMix(b.color),
-              }"
-              role="button"
-              tabindex="0"
-              :aria-label="`编辑${b.displayName}`"
-              @click="openEditEditor(b.slotId)"
-              @keydown.enter="openEditEditor(b.slotId)"
+            </div>
+          </template>
+
+          <template v-else>
+            <!-- 周视图：左侧大节时间轴 + 7 列网格，手机端也在一页展示整周 -->
+            <div
+              class="week-grid swipe-surface"
+              @pointerdown="onSwipeStart"
+              @pointerup="onSwipeEnd"
+              @pointercancel="onSwipeCancel"
+              @click.capture="onSwipeClickCapture"
             >
-              <span class="wc-name">{{ b.displayName }}</span>
-              <span class="wc-room">{{ b.room || '' }}</span>
-            </article>
-          </div>
+              <div class="week-head">
+                <span class="week-axis-head">时间</span>
+                <span
+                  v-for="h in header"
+                  :key="h.weekday"
+                  class="week-head-cell"
+                  :class="{ today: h.date === actualToday }"
+                  :aria-current="h.date === actualToday ? 'date' : undefined"
+                >
+                  <b>周{{ h.label }}</b>
+                  <small>{{ h.date.slice(5) }}</small>
+                </span>
+              </div>
+              <div
+                class="week-body"
+                :style="{ gridTemplateRows: `repeat(${bigRows.length}, minmax(72px, 1fr))` }"
+              >
+                <template
+                  v-for="(row, rowIndex) in bigRows"
+                  :key="row.big"
+                >
+                  <div
+                    class="week-axis"
+                    :style="{ gridColumn: 1, gridRow: rowIndex + 1 }"
+                  >
+                    <span class="axis-time">{{ row.start }}</span>
+                    <span class="axis-label">{{ row.big }}大节</span>
+                  </div>
+                  <span
+                    v-for="(h, dayIndex) in header"
+                    :key="`${row.big}-${h.weekday}`"
+                    class="week-cell"
+                    :class="{ today: h.date === actualToday }"
+                    :style="{ gridColumn: dayIndex + 2, gridRow: rowIndex + 1 }"
+                  />
+                </template>
+                <!-- 课程块：跨行跨列定位 -->
+                <article
+                  v-for="b in weekCourses"
+                  :key="'wc-' + b.slotId"
+                  class="week-course"
+                  :style="{
+                    gridColumn: (b.weekday + 1) + ' / span 1',
+                    gridRow: (b.rowFrom + 1) + ' / ' + (b.rowTo + 2),
+                    borderLeftColor: b.color,
+                    background: colorMix(b.color),
+                  }"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`编辑${b.displayName}`"
+                  @click="openEditEditor(b.slotId)"
+                  @keydown.enter="openEditEditor(b.slotId)"
+                >
+                  <span class="wc-name">{{ b.displayName }}</span>
+                  <span class="wc-room">{{ b.room || '' }}</span>
+                </article>
+              </div>
+            </div>
+          </template>
         </div>
-      </template>
+      </Transition>
     </template>
 
     <div
@@ -677,17 +908,36 @@ async function deleteEditorSlot() {
 
 <style scoped>
 .timetable {
+  position: relative;
   padding-top: 4px;
+}
+
+.view-head-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.view-head-main p {
+  overflow-wrap: anywhere;
+}
+
+.view-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .add-course-btn {
   min-height: 36px;
+  flex: 0 0 auto;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   color: var(--accent);
   font-weight: 600;
+  white-space: nowrap;
 }
 .add-course-btn:hover {
   border-color: var(--accent);
@@ -695,6 +945,19 @@ async function deleteEditorSlot() {
 .add-course-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+.today-link {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.today-link:hover {
+  background: var(--accent-soft);
 }
 .readonly-note {
   margin: 14px 0 0;
@@ -711,6 +974,51 @@ async function deleteEditorSlot() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.week-ctrl .today-link {
+  margin-left: auto;
+}
+
+.timetable-swipe-panel {
+  min-width: 0;
+  will-change: transform, opacity;
+}
+
+.timetable-swipe-next-enter-active,
+.timetable-swipe-next-leave-active,
+.timetable-swipe-previous-enter-active,
+.timetable-swipe-previous-leave-active,
+.timetable-view-enter-active,
+.timetable-view-leave-active {
+  transition:
+    transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 180ms ease-out;
+}
+
+.timetable-swipe-next-enter-from {
+  opacity: 0;
+  transform: translateX(36px);
+}
+
+.timetable-swipe-next-leave-to {
+  opacity: 0;
+  transform: translateX(-36px);
+}
+
+.timetable-swipe-previous-enter-from {
+  opacity: 0;
+  transform: translateX(-36px);
+}
+
+.timetable-swipe-previous-leave-to {
+  opacity: 0;
+  transform: translateX(36px);
+}
+
+.timetable-view-enter-from,
+.timetable-view-leave-to {
+  opacity: 0;
 }
 
 .week-btn {
@@ -847,6 +1155,18 @@ async function deleteEditorSlot() {
 }
 
 @media (max-width: 767px) {
+  .view-head {
+    gap: 8px;
+  }
+
+  .view-head-actions {
+    gap: 6px;
+  }
+
+  .add-course-btn {
+    padding-inline: 8px;
+  }
+
   .week-grid,
   .week-head,
   .week-body {
@@ -895,6 +1215,77 @@ async function deleteEditorSlot() {
   display: grid;
   gap: 10px;
 }
+
+@media (max-width: 767px) {
+  .is-day-view .day-grid {
+    /* 为固定底部导航和手势区留出空间，让标准五大节在一屏内完整可见。 */
+    height: max(0px, calc(100svh - 271px - var(--mobile-nav-inset)));
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 6px;
+    overflow: hidden;
+  }
+  .is-day-view .day-period {
+    min-height: 0;
+  }
+  .is-day-view .day-period-content {
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px;
+  }
+  .is-day-view .day-course {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 6px 8px;
+    gap: 2px;
+  }
+  .is-day-view .day-course strong,
+  .is-day-view .day-course span,
+  .is-day-view .day-course small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .is-day-view .day-period-meta {
+    min-width: 0;
+    padding: 8px 6px;
+    gap: 2px;
+  }
+  .is-day-view .day-period-meta strong,
+  .is-day-view .day-period-meta span,
+  .is-day-view .day-period-meta small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .is-day-view .day-period-meta span,
+  .is-day-view .day-period-meta small,
+  .is-day-view .day-course span,
+  .is-day-view .day-course small {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 380px) {
+  .is-day-view .day-period {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .is-day-view .day-period-meta {
+    padding-inline: 4px;
+  }
+  .is-day-view .day-course {
+    padding-inline: 6px;
+  }
+}
+
+/* 保留宽屏单日视图原有的自然高度。 */
+@media (min-width: 768px) {
+  .is-day-view .day-grid {
+    height: auto;
+    overflow: visible;
+  }
+}
+
 .day-period {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
@@ -1071,6 +1462,17 @@ async function deleteEditorSlot() {
   }
   .day-course {
     min-width: 124px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timetable-swipe-next-enter-active,
+  .timetable-swipe-next-leave-active,
+  .timetable-swipe-previous-enter-active,
+  .timetable-swipe-previous-leave-active,
+  .timetable-view-enter-active,
+  .timetable-view-leave-active {
+    transition: none;
   }
 }
 </style>

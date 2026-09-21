@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.db import get_session
 from app.core.journal import now_iso
 from app.models import Device, Pairing
@@ -50,9 +51,11 @@ def create_device_token(session: Session, name: str, platform: str) -> tuple[str
     return device_id, credential
 
 
-def create_pairing(session: Session, created_by: str) -> tuple[str, int]:
-    """生成一次性配对码 + 有效期（默认 300s）。返回 (明文码, ttl)。"""
-    ttl = 300
+def create_pairing(session: Session, created_by: str, ttl: int | None = None) -> tuple[str, int]:
+    """生成一次性配对码 + 有效期（取配置 pairing_code_ttl）。返回 (明文码, ttl)。"""
+    if ttl is None:
+        # 配置可能被写歪：钳到 1~60 分钟，避免「立刻过期」或「一天有效」。
+        ttl = max(60, min(int(get_settings().pairing_code_ttl), 3600))
     code = f"{secrets.randbelow(900) + 100}-{secrets.randbelow(900) + 100}-{secrets.randbelow(100)}"
     expires = (_utcnow() + timedelta(seconds=ttl)).isoformat(timespec="seconds")
     session.add(

@@ -14,15 +14,23 @@ async function load() {
 }
 async function restore(todo: TodoRow) {
   await sync.localWrite('todo', todo.id, {}, todo._rev, false)
+  todo._deleted_at = null
   message.value = `已恢复「${todo.title}」`
-  await load()
 }
 let unsubscribe: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 onMounted(() => {
-  unsubscribe = sync.subscribe(() => void load())
+  unsubscribe = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => entity === 'todo')) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
+  })
   void load()
 })
-onUnmounted(() => unsubscribe?.())
+onUnmounted(() => {
+  unsubscribe?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
+})
 </script>
 
 <template>

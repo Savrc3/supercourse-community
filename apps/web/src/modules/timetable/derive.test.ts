@@ -8,11 +8,15 @@ import {
   computeTodayTimeline,
   currentWeek,
   deriveBigPeriodRows,
+  inTermRange,
+  isDateInTerm,
   lessonTime,
   mergeConsecutive,
   parseWeeks,
+  shiftISODate,
   slotInWeek,
   truncateName,
+  weekdayOfISO,
   weekDates,
   weekHeader,
   type CourseSlot,
@@ -84,6 +88,23 @@ describe('weekDates / currentWeek / weekHeader', () => {
     expect(head).toHaveLength(7)
     expect(head[0]).toMatchObject({ weekday: 1, label: '一', date: '2026-08-31' })
     expect(head[6]).toMatchObject({ weekday: 7, label: '日', date: '2026-09-06' })
+  })
+
+  it('日期移动能正确跨越周日和周一', () => {
+    expect(shiftISODate('2026-09-06', 1)).toBe('2026-09-07')
+    expect(shiftISODate('2026-09-07', -1)).toBe('2026-09-06')
+  })
+
+  it('现实日期星期与课表星期一致，周日为 7', () => {
+    expect(weekdayOfISO('2026-09-21')).toBe(1)
+    expect(weekdayOfISO('2026-09-27')).toBe(7)
+  })
+
+  it('日期范围只覆盖学期的第一天到最后一天', () => {
+    expect(isDateInTerm('2026-08-31', 20, '2026-08-31')).toBe(true)
+    expect(isDateInTerm('2026-08-31', 20, '2027-01-17')).toBe(true)
+    expect(isDateInTerm('2026-08-31', 20, '2027-01-18')).toBe(false)
+    expect(isDateInTerm('2026-08-31', 20, '2026-08-30')).toBe(false)
   })
 })
 
@@ -247,5 +268,35 @@ describe('deriveBigPeriodRows / blockRowSpan', () => {
     const rows = deriveBigPeriodRows(periods)
     const block = { slotId: 's', courseId: 'c', weekday: 1, startLesson: 1, endLesson: 4, room: null, weeks: { ranges: [[1, 16]], only: [], except: [], parity: 'all' as const } }
     expect(blockRowSpan(block, rows)).toEqual({ from: 0, to: 1 })
+  })
+})
+
+describe('inTermRange 学期区间判断', () => {
+  it('第一周周一 ~ 最后一周周日为区间内', () => {
+    expect(inTermRange('2026-09-07', '2026-09-07', 2)).toBe(true)
+    expect(inTermRange('2026-09-07', '2026-09-20', 2)).toBe(true)
+    expect(inTermRange('2026-09-07', '2026-09-06', 2)).toBe(false)
+    expect(inTermRange('2026-09-07', '2026-09-21', 2)).toBe(false)
+  })
+
+  it('start_date 非法时判为区间外（不排提醒）', () => {
+    expect(inTermRange('垃圾', '2026-09-10', 2)).toBe(false)
+  })
+})
+
+describe('currentWeek 跨夏令时', () => {
+  it('用日历日计算周次，不受 DST 切换影响', () => {
+    const original = process.env.TZ
+    // 智利 2026-09-06 起夏令时；08-31 → 09-21 之间本地少了一小时，
+    // 毫秒除法会把 21 天算成 20.958 天 → 少一周。
+    process.env.TZ = 'America/Santiago'
+    try {
+      expect(currentWeek('2026-08-31', '2026-08-31', 20)).toBe(1)
+      expect(currentWeek('2026-08-31', '2026-09-06', 20)).toBe(1)
+      expect(currentWeek('2026-08-31', '2026-09-20', 20)).toBe(3)
+      expect(currentWeek('2026-08-31', '2026-09-21', 20)).toBe(4)
+    } finally {
+      process.env.TZ = original
+    }
   })
 })

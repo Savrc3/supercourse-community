@@ -121,7 +121,16 @@ export interface OutboxRow {
   set: Record<string, unknown>
   base_rev: number
   deleted?: boolean
+  /** 本地写入时刻（按服务端时间轴校过钟），服务端用它做字段级 LWW 比较。 */
+  updated_at?: string
   created_at: string
+  blocked?: boolean
+  last_error?: string | null
+}
+
+export interface SyncShadowRow extends SymRow, Record<string, unknown> {
+  key: string
+  entity: string
 }
 
 export class SupercourseDB extends Dexie {
@@ -135,6 +144,7 @@ export class SupercourseDB extends Dexie {
   media!: Table<MediaRow, string>
   attachment!: Table<AttachmentRow, string>
   outbox!: Table<OutboxRow, string>
+  sync_shadow!: Table<SyncShadowRow, string>
   meta!: Table<{ key: string; value: string }, string>
 
   constructor() {
@@ -156,6 +166,9 @@ export class SupercourseDB extends Dexie {
     this.version(3).stores({
       media: 'id, _rev, sha256, uploaded, created_at',
       attachment: 'id, _rev, media_id, owner_type, owner_id, position',
+    })
+    this.version(4).stores({
+      sync_shadow: 'key, _rev, entity, id',
     })
   }
 }

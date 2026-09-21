@@ -21,18 +21,22 @@ class Settings(BaseSettings):
     env: Literal["dev", "prod"] = "dev"
     data_dir: Path = Field(default=Path("./data"), description="SQLite 与图片根目录")
     log_level: str = "INFO"
-    host: str = "localhost"
+    host: str = "127.0.0.1"
     port: int = 8090
     tombstone_days: int = 60
     media_max_bytes: int = 6 * 1024 * 1024
     android_update_url: str | None = None
+    desktop_update_url: str | None = None
     pairing_code_ttl: int = 300
+    # 只有确定前面挂了可信反向代理时才打开：打开后限流按 X-Forwarded-For 第一跳
+    # 记账，否则客户端可以伪造该头绕过限流。
+    trust_proxy_headers: bool = False
     max_request_bytes: int = 20 * 1024 * 1024
     allow_registration: bool = True
     expose_health_details: bool = True
     allowed_origins: str = ""
     qq_enabled: bool = False
-    onebot_url: str = "http://localhost:3000"
+    onebot_url: str = "http://127.0.0.1:3000"
     onebot_token: str = ""
     qq_target_user_id: int = 0
 

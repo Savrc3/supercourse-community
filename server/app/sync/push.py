@@ -16,9 +16,16 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.journal import clamp_updated_at, next_rev, now_iso
+from app.core.journal import (
+    clamp_updated_at,
+    latest_iso,
+    next_rev,
+    now_iso,
+    parse_iso,
+)
 from app.models import Conflict, OpLog, Setting
 from app.sync.registry import EntityName, get_spec
+from app.sync.validation import validate_op_fields
 
 
 class SyncError(Exception):
@@ -80,15 +87,22 @@ def _apply_merge(
     updates: dict[str, Any],
     device_id: str,
     op_id: str,
+    op_ts: str | None = None,
 ) -> OpResult:
     """base_rev 过期时的字段级 LWW 合并。
 
     对每个客户端改动字段：若该字段在服务端自 base_rev 后也变过
     （即当前 rev != base_rev 且该列值已非旧快照）→ 记为冲突字段，
     取 updated_at 新者为胜（相同则服务端胜）；败方整行快照写 conflict。
+
+    客户端时间戳取 op 级的 ``op_ts``（= 客户端编辑时刻，已按 server_time
+    校过钟）；派生的 ``set`` 里不会有 ``updated_at``（它不在白名单内）。
     """
     server_ts = row.updated_at
-    client_ts = updates.get("updated_at")
+    client_ts = op_ts
+    # 快照必须在改动 row 之前取：冲突箱里的 «服务端版本» 应是冲突发生时的
+    # 那一版，不能用合并后的结果（否则客户端胜时记录的是客户端自己的值）。
+    server_snapshot = json.dumps(_row_to_dict(row, spec), ensure_ascii=False)
 
     # 提取冲突字段：客户端改动的字段，若服务端当前值与客户端要写入的值不同，
     # 说明两端对该字段都写了不同内容 → 记冲突。
@@ -98,13 +112,17 @@ def _apply_merge(
         if field not in ("rev", "updated_at", "deleted_at") and getattr(row, field, None) != value
     ]
 
-    # 胜负判定：冲突字段取 updated_at 新者胜（相同则服务端胜）
+    # 胜负判定：冲突字段取 updated_at 新者胜（相同则服务端胜）。
+    # 时间戳必须解析后比较：``+08:00`` 与 ``Z`` 的字符串序不等于时间序。
+    # 客户端戳先过 §5.6 钳制：未来超过 60 秒的戳不可信（时钟跑飞），直接判负。
+    client_stamp = clamp_updated_at(client_ts) if client_ts else None
+    trusted = client_stamp is not None and client_stamp == client_ts
     client_wins = False
-    if conflict_fields and client_ts and server_ts:
-        try:
-            client_wins = client_ts > server_ts
-        except TypeError:
-            client_wins = False
+    if conflict_fields and trusted:
+        client_time = parse_iso(client_ts)
+        server_time = parse_iso(server_ts)
+        if client_time is not None and server_time is not None:
+            client_wins = client_time > server_time
 
     # 逐字段应用（冲突字段按胜负决定是否采纳客户端值）
     for field, value in updates.items():
@@ -115,7 +133,9 @@ def _apply_merge(
         setattr(row, field, value)
 
     row.rev = next_rev(session)
-    row.updated_at = clamp_updated_at(client_ts or now_iso())
+    # 行的 updated_at 只能前进：合并后取两端较新者，避免把行的时间戳拉回旧值
+    # （后续冲突判断会拿它当服务端时间）。
+    row.updated_at = latest_iso(server_ts, client_stamp or now_iso())
 
     conflict_id: str | None = None
     if conflict_fields:
@@ -129,7 +149,7 @@ def _apply_merge(
                 row_id=row.id,
                 device_id=device_id,
                 base_rev=base_rev,
-                server_row=json.dumps(_row_to_dict(row, spec), ensure_ascii=False),
+                server_row=server_snapshot,
                 local_row=json.dumps(updates, ensure_ascii=False),
                 winner="server" if not client_wins else "client",
                 created_at=_now(),
@@ -186,7 +206,7 @@ def apply_op(
             base_rev = row.rev
         row.deleted_at = now_iso() if deleted else None
         row.rev = next_rev(session)
-        row.updated_at = clamp_updated_at(op_ts or now_iso())
+        row.updated_at = latest_iso(row.updated_at, clamp_updated_at(op_ts))
         session.add(
             OpLog(
                 client_op_id=op_id,
@@ -204,8 +224,6 @@ def apply_op(
     unknown = [f for f in set_fields if not spec.is_writable(f)]
     if unknown:
         return OpResult(op_id, "rejected", error="unknown_field")
-    if entity == "todo" and "status" in set_fields and str(set_fields["status"]) not in {"0", "1"}:
-        return OpResult(op_id, "rejected", error="invalid_status")
 
     row = _find_row(session, spec, row_id)
     if entity == "setting":
@@ -213,6 +231,18 @@ def apply_op(
         key = set_fields.get("key")
         if isinstance(key, str) and key:
             row = session.scalar(select(Setting).where(Setting.key == key)) or row
+    # 引用/必填/取值域校验：非法输入回 rejected（明确错误码），
+    # 而不是等 SQLite 抛 IntegrityError 变成 500、让客户端整批 op 卡住重试。
+    invalid = validate_op_fields(
+        session,
+        entity,
+        spec.model,
+        row_id,
+        set_fields,
+        is_new=row is None,
+    )
+    if invalid:
+        return OpResult(op_id, "rejected", error=invalid)
     if row is None:
         # 新建
         row = spec.model(id=row_id)
@@ -234,7 +264,7 @@ def apply_op(
             for field, value in set_fields.items():
                 setattr(row, field, value)
             row.rev = next_rev(session)
-            row.updated_at = clamp_updated_at(op_ts)
+            row.updated_at = latest_iso(row.updated_at, clamp_updated_at(op_ts))
         else:
             # 字段级 LWW 合并
             result = _apply_merge(
@@ -245,6 +275,7 @@ def apply_op(
                 set_fields,
                 device_id,
                 op_id,
+                op_ts=op_ts,
             )
             session.add(
                 OpLog(

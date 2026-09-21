@@ -1,7 +1,9 @@
-"""超课表后端应用入口。"""
+"""课序后端应用入口。"""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -10,8 +12,10 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.auth import router as auth_router
 from app.api.importer import router as import_router
@@ -20,9 +24,11 @@ from app.api.reminders import router as reminders_router
 from app.api.sync import router as sync_router
 from app.api.system import router as system_router
 from app.core.config import get_settings
+from app.core.events import bind_event_loop
 from app.core.logging import setup_logging
 from app.core.version import APP_VERSION
 from app.modules.remind.engine import start_scheduler, stop_scheduler
+from app.sync.tombstones import schedule_tombstone_purge
 
 API_PREFIX = "/api"
 _logger = logging.getLogger("supercourse.request")
@@ -37,33 +43,84 @@ def configured_origins(settings: object) -> list[str]:
         "https://localhost",
         "capacitor://localhost",
         "http://localhost",
-        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ]
 
 
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    """在解析请求体前拒绝明显过大的请求。"""
+class RequestSizeLimitMiddleware:
+    """请求体大小上限：Content-Length 快路径 + 边读边计数。
 
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        raw_length = request.headers.get("content-length")
+    只看 ``Content-Length`` 时，带 ``Transfer-Encoding: chunked`` 的请求可以绕过
+    上限。这里先把请求体读到 ``max_request_bytes`` 以内（超出立即回 413），再把
+    读到的内容回放给应用——若把计数放进 ``receive`` 里抛异常，FastAPI 的 JSON
+    解析会把异常吞成 ``400 请求体解析失败``，错误码就不再是「太大」了。
+
+    代价是请求体在进入应用前被完整读入内存（上限即 ``max_request_bytes``）。
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        limit = get_settings().max_request_bytes
+        raw_length = Headers(scope=scope).get("content-length")
         if raw_length:
             try:
                 length = int(raw_length)
             except ValueError:
-                return JSONResponse(
-                    {"detail": {"code": "invalid_content_length", "message": "请求大小无效"}},
-                    status_code=400,
-                )
-            if length > get_settings().max_request_bytes:
-                return JSONResponse(
-                    {"detail": {"code": "request_too_large", "message": "请求内容过大"}},
-                    status_code=413,
-                )
-        return await call_next(request)
+                await _reject(send, 400, "invalid_content_length", "请求大小无效")
+                return
+            if length > limit:
+                await _reject(send, 413, "request_too_large", "请求内容过大")
+                return
+
+        body = bytearray()
+        disconnected = False
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                disconnected = True
+                break
+            if message["type"] != "http.request":
+                break
+            body.extend(message.get("body", b""))
+            if len(body) > limit:
+                await _reject(send, 413, "request_too_large", "请求内容过大")
+                return
+            if not message.get("more_body", False):
+                break
+
+        payload = bytes(body)
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": payload, "more_body": False}
+            if disconnected:
+                return {"type": "http.disconnect"}
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+
+async def _reject(send: Send, status_code: int, code: str, message: str) -> None:
+    body = json.dumps({"detail": {"code": code, "message": message}}, ensure_ascii=False).encode()
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -83,7 +140,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; base-uri 'self'; object-src 'none'; "
             "frame-ancestors 'none'; img-src 'self' data: blob:; "
             "style-src 'self' 'unsafe-inline'; script-src 'self'; "
-            "connect-src 'self' https: http://localhost:* http://localhost:*; "
+            "connect-src 'self' https: http://localhost:* http://127.0.0.1:*; "
             "font-src 'self' data:; form-action 'self'",
         )
         response.headers.setdefault(
@@ -125,11 +182,16 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     get_settings().ensure_dirs()
+    # SSE 广播要从工作线程回到主 loop（同步端点在 AnyIO 线程池里执行）。
+    bind_event_loop(asyncio.get_running_loop())
     start_scheduler()
+    # 墓碑清理挂在同一个调度器上（每 6 小时一次）。
+    schedule_tombstone_purge()
     try:
         yield
     finally:
         stop_scheduler()
+        bind_event_loop(None)
 
 
 def create_app() -> FastAPI:

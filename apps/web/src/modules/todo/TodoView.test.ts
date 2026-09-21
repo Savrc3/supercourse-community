@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
     todos: [] as Record<string, unknown>[],
     localWrite: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockReturnValue(() => undefined),
+    subscribeChanges: vi.fn().mockReturnValue(() => undefined),
   }
   return {
     ...state,
@@ -54,6 +55,9 @@ describe('TodoView 待办操作', () => {
     mocks.todos.length = 0
     mocks.localWrite.mockClear()
     mocks.subscribe.mockClear()
+    mocks.db.todo.toArray.mockClear()
+    mocks.db.term.toArray.mockClear()
+    mocks.db.course.toArray.mockClear()
   })
 
   it('新增待办时写入结构化截止时间、优先级和标签', async () => {
@@ -105,7 +109,7 @@ describe('TodoView 待办操作', () => {
     )
 
     mocks.localWrite.mockClear()
-    await wrapper.get('button[aria-label="完成：原待办"]').trigger('click')
+    await wrapper.get('button[aria-label="完成：改过的待办"]').trigger('click')
     expect(mocks.localWrite).toHaveBeenCalledWith(
       'todo',
       'todo-1',
@@ -115,9 +119,28 @@ describe('TodoView 待办操作', () => {
 
     mocks.localWrite.mockClear()
     vi.stubGlobal('confirm', vi.fn(() => true))
-    await wrapper.get('button[aria-label="删除：原待办"]').trigger('click')
+    await wrapper.get('button[aria-label="删除：改过的待办"]').trigger('click')
     expect(mocks.localWrite).toHaveBeenCalledWith('todo', 'todo-1', {}, 1, true)
     vi.unstubAllGlobals()
+  })
+
+  it('本地操作不会再次整表读取造成列表刷新', async () => {
+    mocks.todos.push(todo())
+    const wrapper = mount(TodoView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    await flushPromises()
+    mocks.db.todo.toArray.mockClear()
+    mocks.db.term.toArray.mockClear()
+    mocks.db.course.toArray.mockClear()
+
+    await wrapper.get('button[aria-label="完成：原待办"]').trigger('click')
+
+    expect(mocks.db.todo.toArray).not.toHaveBeenCalled()
+    expect(mocks.db.term.toArray).not.toHaveBeenCalled()
+    expect(mocks.db.course.toArray).not.toHaveBeenCalled()
+    expect(wrapper.get('.completed-section summary').text()).toContain('已完成（1）')
+    wrapper.unmount()
   })
 
   it('二元状态的折叠区只显示已完成', async () => {

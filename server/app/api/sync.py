@@ -20,6 +20,7 @@ from app.core.auth import (
 from app.core.db import get_session
 from app.core.events import broadcast_rev, sse_stream
 from app.core.journal import clamp_updated_at, current_rev, next_rev, now_iso
+from app.core.rate_limit import client_ip, pairing_attempts
 from app.models import Conflict, Device
 from app.modules.remind.engine import CONFIG_KEY, load_config, refresh_daily_summary_schedule
 from app.sync.backup import export_all, restore_all
@@ -51,6 +52,7 @@ def pairing_start(
 
 @router.post("/pairing/exchange")
 def pairing_exchange(
+    request: Request,
     payload: dict[str, Any],
     session: Db,
 ) -> dict[str, Any]:
@@ -60,7 +62,20 @@ def pairing_exchange(
     platform = str(payload.get("platform", ""))
     if not code or not name:
         raise _bad_request("invalid_request", "缺少 code 或 name")
-    device_id, credential = exchange_pairing(session, code=code, name=name, platform=platform)
+    # 配对码空间小（三位-三位-两位），不加频控等于允许在线暴力猜。
+    key = f"pair:{client_ip(request)}"
+    if not pairing_attempts.allow(key, limit=10, window=300):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "pairing_rate_limited", "message": "配对尝试过于频繁，请稍后再试"},
+            headers={"Retry-After": "300"},
+        )
+    try:
+        device_id, credential = exchange_pairing(session, code=code, name=name, platform=platform)
+    except HTTPException:
+        pairing_attempts.record(key, window=300)
+        raise
+    pairing_attempts.clear(key)
     return {"device_id": device_id, "token": credential}
 
 

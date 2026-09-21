@@ -26,8 +26,13 @@ async function load() {
 }
 
 let unsubscribe: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 onMounted(async () => {
-  unsubscribe = sync.subscribe(() => void load())
+  unsubscribe = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['todo', 'course', 'setting'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
+  })
   await load()
   try {
     const token = localStorage.getItem('sc_token')
@@ -35,7 +40,10 @@ onMounted(async () => {
     if (response.ok) logs.value = (await response.json() as { logs: ReminderLogRow[] }).logs
   } catch { /* 离线时仍显示本地提醒 */ }
 })
-onUnmounted(() => unsubscribe?.())
+onUnmounted(() => {
+  unsubscribe?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
+})
 
 function overdue(todo: TodoRow): boolean {
   if (!todo.due_at) return false

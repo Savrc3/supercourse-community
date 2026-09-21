@@ -40,11 +40,19 @@ async function load() {
 }
 
 let unsubscribe: (() => void) | null = null
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
 onMounted(async () => {
-  unsubscribe = sync.subscribe(() => void load())
+  unsubscribe = sync.subscribeChanges((changes) => {
+    if (!changes.some(({ entity }) => ['todo', 'course'].includes(entity))) return
+    if (reloadTimer) clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => void load(), 120)
+  })
   await load()
 })
-onUnmounted(() => unsubscribe?.())
+onUnmounted(() => {
+  unsubscribe?.()
+  if (reloadTimer) clearTimeout(reloadTimer)
+})
 </script>
 
 <template>

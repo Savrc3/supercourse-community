@@ -157,6 +157,13 @@ def calculate_class_events(
     term = terms[0] if terms else None
     if term is None:
         return []
+    try:
+        term_start = date.fromisoformat(term.start_date)
+    except (TypeError, ValueError):
+        return []
+    # 学期区间：第一周周一 ~ 最后一周周日。区间外不再「钳制到边界周」——
+    # 否则寒暑假、开学前都会照常提醒，而课表上根本没有这一天。
+    term_end = term_start + timedelta(days=max(term.weeks_total, 0) * 7 - 1)
     courses = {
         row.id: row
         for row in session.execute(
@@ -181,13 +188,9 @@ def calculate_class_events(
     result: list[ClassReminderEvent] = []
     for day_index in range(56):
         day = current.date() + timedelta(days=day_index)
-        week = max(
-            1,
-            min(
-                (day - date.fromisoformat(term.start_date)).days // 7 + 1,
-                term.weeks_total,
-            ),
-        )
+        if day < term_start or day > term_end:
+            continue
+        week = (day - term_start).days // 7 + 1
         for slot in slots:
             if slot.course_id not in courses or slot.weekday != day.isoweekday():
                 continue
@@ -262,9 +265,22 @@ def _merge_config(default: dict[str, Any], stored: dict[str, Any]) -> dict[str, 
     return result
 
 
+def lead_text(delta: timedelta) -> str:
+    """把提前量渲染成人类可读文本（"1 天"、"2 小时"、"15 分钟"）。"""
+    seconds = max(int(abs(delta.total_seconds())), 60)
+    if seconds % 86400 == 0:
+        return f"{seconds // 86400} 天"
+    if seconds % 3600 == 0:
+        return f"{seconds // 3600} 小时"
+    return f"{max(round(seconds / 60), 1)} 分钟"
+
+
 def reminder_message(todo: Todo, course_name: str, offset: str) -> str:
     course = course_name or "杂事"
-    return f"课序提醒\n{course}\n{todo.title}\n将在 {offset} 后到期。"
+    # 不把 -P1D 这种 ISO 时长直接丢给用户。
+    parsed = parse_iso_duration(offset)
+    lead = lead_text(parsed) if parsed else offset
+    return f"课序提醒\n{course}\n{todo.title}\n将在 {lead}后到期。"
 
 
 def _detail(row: ReminderLog) -> dict[str, Any]:
@@ -349,15 +365,21 @@ def _send_event(
     )
 
 
-def _send_class_event(session: Session, settings: Settings, event: ClassReminderEvent) -> bool:
+def class_message(event: ClassReminderEvent) -> str:
+    """上课提醒文案：提前量按实际配置渲染，不再写死「15 分钟」。"""
     room = f"\n地点：{event.room}" if event.room else ""
+    lead = lead_text(event.starts_at - event.fire_at)
+    return f"课序上课提醒\n{event.course_name}{room}\n{lead}后开始。"
+
+
+def _send_class_event(session: Session, settings: Settings, event: ClassReminderEvent) -> bool:
     return _send_message(
         session,
         settings,
         event_id=event.event_id,
         todo_id=None,
         fire_at=event.fire_at,
-        message=f"课序上课提醒\n{event.course_name}{room}\n15 分钟后开始。",
+        message=class_message(event),
     )
 
 
@@ -407,9 +429,19 @@ def build_daily_summary(session: Session, current: datetime | None = None) -> st
     today = now.date()
     terms = session.execute(select(Term).where(Term.deleted_at.is_(None))).scalars().all()
     term = next((item for item in terms if item.is_current == 1), terms[0] if terms else None)
-    courses = {course.id: course for course in session.execute(select(Course)).scalars().all()}
+    # 与 calculate_class_events 保持一致：软删的课程/时段不进摘要，否则删掉的课
+    # 仍会出现在「今日课程」推送里。
+    courses = {
+        course.id: course
+        for course in session.execute(select(Course).where(Course.deleted_at.is_(None)))
+        .scalars()
+        .all()
+    }
     periods = {
-        period.lesson_no: period for period in session.execute(select(LessonPeriod)).scalars().all()
+        period.lesson_no: period
+        for period in session.execute(select(LessonPeriod).where(LessonPeriod.deleted_at.is_(None)))
+        .scalars()
+        .all()
     }
     classes: list[str] = []
     if term:
@@ -418,7 +450,11 @@ def build_daily_summary(session: Session, current: datetime | None = None) -> st
             week = max(1, min((today - start).days // 7 + 1, term.weeks_total))
         except ValueError:
             week = 1
-        slots = session.execute(select(CourseSlot)).scalars().all()
+        slots = (
+            session.execute(select(CourseSlot).where(CourseSlot.deleted_at.is_(None)))
+            .scalars()
+            .all()
+        )
         for slot in slots:
             if slot.weekday != today.isoweekday() or slot.course_id not in courses:
                 continue
@@ -521,6 +557,11 @@ _scheduler: BackgroundScheduler | None = None
 
 def scheduler_ok() -> bool:
     return bool(_scheduler and _scheduler.running)
+
+
+def get_scheduler() -> BackgroundScheduler | None:
+    """当前调度器（供 main 注册墓碑清理等周期任务）。"""
+    return _scheduler
 
 
 def _summary_time(config: dict[str, Any]) -> str:

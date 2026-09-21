@@ -910,6 +910,10 @@ async function deleteEditorSlot() {
 .timetable {
   position: relative;
   padding-top: 4px;
+  /* 滑动切换时面板会横向偏移 36px，若不裁剪，页面内容会超出视口宽度；
+     移动端 Chrome/WebView 遇到横向溢出会把布局视口整体撑大（innerWidth/innerHeight 变大），
+     固定底部导航随之被推到可见区域之外，图标可见但文字被裁掉。这里裁剪掉动画溢出。 */
+  overflow: clip;
 }
 
 .view-head-main {

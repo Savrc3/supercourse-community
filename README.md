@@ -31,14 +31,25 @@
 
 ## 五分钟本地开发
 
+Windows：
+
 ```powershell
 powershell -NoProfile -File scripts/setup-env.ps1
 cd server; uv sync; cd ..
 npm ci
-powershell -NoProfile -File scripts/dev.ps1
+npm run dev
 ```
 
-然后打开 `http://localhost:5173`。若 4173 已被 Windows 桌面端占用，开发前端仍使用 5173；Playwright 会自动使用独立的 4174 测试端口。
+Linux / WSL：
+
+```bash
+bash scripts/setup-env.sh        # 用户级安装 JDK 21 + Android SDK + uv + Python 3.10.12
+cd server && uv sync && cd ..
+npm ci
+npm run dev
+```
+
+`npm run dev` 按平台自动分流（Windows → `scripts/dev.ps1`，Linux/macOS → `scripts/dev.sh`）。然后打开 `http://127.0.0.1:5173`。若 4173 已被 Windows 桌面端占用，开发前端仍使用 5173；Playwright 会自动使用独立的 4174 测试端口。
 
 ## 构建三端
 
@@ -52,8 +63,8 @@ Windows 安装包在 `apps/desktop/dist/`；Android Release APK 由脚本输出�
 
 ## 质量门禁
 
-```powershell
-powershell -NoProfile -File scripts/check-all.ps1
+```bash
+npm run check-all          # Windows → check-all.ps1；Linux/WSL → check-all.sh
 ```
 
 门禁包含后端 pytest/ruff/mypy、前端 ESLint/vue-tsc/Vitest/build、Playwright 冒烟和敏感信息扫描。发布前还要完成 [安全与兼容性验收清单](安全与兼容性验收清单.md)。
@@ -61,10 +72,12 @@ powershell -NoProfile -File scripts/check-all.ps1
 ## 文档入口
 
 - [使用与恢复手册](docs/使用与恢复手册.md)：日常使用、备份和恢复。
+- [零基础项目解剖课](docs/课序项目·零基础解剖课.md)：从一次点击开始理解项目的结构、数据流和技术实现。
 - [自建部署手册](deploy/README.md)：Docker Compose 单实例部署。
 - [隐私与运行模式说明](docs/隐私与运行模式说明.md)：本地、自建和个人实例的边界。
 - [贡献指南](CONTRIBUTING.md) 与 [安全政策](SECURITY.md)。
 - [需求规格说明书](docs/需求规格说明书.md)、[技术方案设计](docs/技术方案设计.md)、[交接开发手册](docs/交接开发手册.md)。
+- [代码审查报告](docs/代码审查报告.md)：已知缺陷、复现证据与修复优先级。
 
 ## 许可
 

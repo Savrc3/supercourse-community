@@ -1,4 +1,51 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+/** 在课表滑动区域上做一次横向手势，用于验证滑动切换后的布局回归。 */
+async function swipeTimetable(page: Page, surfaceSelector: string) {
+  const swipeBox = await page.locator(surfaceSelector).boundingBox()
+  if (!swipeBox) throw new Error(`${surfaceSelector} 滑动区域未渲染`)
+  await page.mouse.move(swipeBox.x + swipeBox.width * 0.75, swipeBox.y + swipeBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(swipeBox.x + swipeBox.width * 0.25, swipeBox.y + swipeBox.height / 2, { steps: 5 })
+  await page.mouse.up()
+  await page.waitForTimeout(80)
+}
+
+/**
+ * 回归：滑动切换的横向动画偏移（36px）不能被当成页面横向溢出。
+ * 移动端 Chrome/WebView 一旦发现横向溢出会整体撑大布局视口（innerWidth/innerHeight 变大），
+ * 固定底部导航随之被推到可见区域之外：图标还在，文字标签被裁掉。
+ */
+async function expectNavStableAfterSwipe(page: Page) {
+  await page.waitForTimeout(600)
+  const metrics = await page.evaluate(() => {
+    const nav = document.querySelector<HTMLElement>('.mobile-nav')
+    if (!nav) throw new Error('底部导航未渲染')
+    const navRect = nav.getBoundingClientRect()
+    const labels = [...nav.querySelectorAll<HTMLElement>('.mobile-tab span')].map((span) => span.getBoundingClientRect())
+    const visual = window.visualViewport
+    return {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      visualWidth: visual?.width ?? window.innerWidth,
+      visualHeight: visual?.height ?? window.innerHeight,
+      navWidth: navRect.width,
+      navBottom: navRect.bottom,
+      labelBottom: Math.max(...labels.map((label) => label.bottom)),
+      scrollWidth: document.scrollingElement?.scrollWidth ?? window.innerWidth,
+      tabWidths: [...nav.querySelectorAll<HTMLElement>('.mobile-tab')].map((tab) => Math.round(tab.getBoundingClientRect().width)),
+    }
+  })
+  const viewport = page.viewportSize()
+  expect(metrics.innerWidth).toBe(viewport?.width)
+  expect(metrics.innerHeight).toBe(viewport?.height)
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth)
+  expect(metrics.navWidth).toBeLessThanOrEqual(metrics.visualWidth + 1)
+  expect(metrics.navBottom).toBeLessThanOrEqual(metrics.visualHeight + 1)
+  expect(metrics.labelBottom).toBeLessThanOrEqual(metrics.visualHeight - 1)
+  expect(new Set(metrics.tabWidths).size).toBe(1)
+  expect(metrics.tabWidths[0] * metrics.tabWidths.length).toBeLessThanOrEqual(metrics.visualWidth + 1)
+}
 
 test('首次访问进入模式向导，不阻塞于网络', async ({ page }) => {
   await page.goto('/')
@@ -81,6 +128,10 @@ test('移动端周视图一屏展示完整七天网格', async ({ page }, testIn
   expect(metrics.width).toBeLessThanOrEqual(metrics.viewportWidth + 1)
   await expect(page.locator('.week-head-cell')).toHaveCount(7)
   await expect(page.locator('.week-course .wc-time')).toHaveCount(0)
+
+  // 周视图共用同一套横向切换动画，滑动后底部导航同样必须完整可见。
+  await swipeTimetable(page, '.week-grid')
+  await expectNavStableAfterSwipe(page)
 })
 
 test('移动端单日视图完整显示五个大节，不被底部导航遮挡', async ({ page }, testInfo) => {
@@ -143,13 +194,7 @@ test('移动端单日视图完整显示五个大节，不被底部导航遮挡',
   await expect(page.locator('.today-mark')).toHaveCount(1)
 
   // 回归：真正滑动切换日期后，固定底部导航不能被动画层裁剪或推到视口外。
-  const swipeBox = await page.locator('.day-grid').boundingBox()
-  if (!swipeBox) throw new Error('单日课表滑动区域未渲染')
-  await page.mouse.move(swipeBox.x + swipeBox.width * 0.75, swipeBox.y + swipeBox.height / 2)
-  await page.mouse.down()
-  await page.mouse.move(swipeBox.x + swipeBox.width * 0.25, swipeBox.y + swipeBox.height / 2, { steps: 5 })
-  await page.mouse.up()
-  await page.waitForTimeout(80)
+  await swipeTimetable(page, '.day-grid')
   const navDuringSwipe = await page.locator('.mobile-nav').evaluate((element) => {
     const rect = element.getBoundingClientRect()
     return {
@@ -181,6 +226,9 @@ test('移动端单日视图完整显示五个大节，不被底部导航遮挡',
     }
   })
   expect(metrics.lastBottom).toBeLessThanOrEqual(metrics.navTop + 1)
+
+  // 回归：滑动结束后布局视口不能被横向动画撑大，底部导航文字必须留在可见区域内。
+  await expectNavStableAfterSwipe(page)
 })
 
 test('待办 Markdown 预览保留标题、列表标记和嵌套层级', async ({ page }) => {

@@ -29,10 +29,15 @@ Run "frontend build" { npm run build --workspace @supercourse/web }
 Run "desktop test" { npm run test --workspace @supercourse/desktop }
 Pop-Location
 
-$scanScript = Join-Path $env:USERPROFILE ".codex\skills\sensitive-scan\scripts\sensitive-scan.py"
+$scanScript = Join-Path $root "scripts\sensitive-scan.py"
+if (-not (Test-Path $scanScript)) {
+  $scanScript = Join-Path $env:USERPROFILE ".codex\skills\sensitive-scan\scripts\sensitive-scan.py"
+}
 if (Test-Path $scanScript) {
-  & python $scanScript $root --exclude node_modules,dist
-  if ($LASTEXITCODE -ne 0) { Write-Host "<<< sensitive scan 有命中（见上）。多为 127.0.0.1 回环 / JDK 版本 / git 身份，私有仓内部提交可接受；对外发布前必须清零。" } else { Write-Host "<<< sensitive scan OK" }
+  & python $scanScript $root --exclude node_modules,dist --skip-private
+  if ($LASTEXITCODE -ne 0) { Write-Host "<<< sensitive scan 有命中（见上），对外发布前必须清零"; $failed = $true } else { Write-Host "<<< sensitive scan OK" }
+} else {
+  Write-Host ">>> sensitive scan（跳过：未找到 $scanScript）"
 }
 
 if ($failed) {

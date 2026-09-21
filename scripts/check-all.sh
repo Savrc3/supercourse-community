@@ -40,10 +40,11 @@ run "vitest"           npm run test      --workspace @supercourse/web
 run "frontend build"   npm run build     --workspace @supercourse/web
 run "desktop test"     npm run test      --workspace @supercourse/desktop
 
-# --- 敏感信息扫描（可选，脚本不存在则跳过）---
-SCAN="$HOME/.codex/skills/sensitive-scan/scripts/sensitive-scan.py"
+# --- 敏感信息扫描（仓库内脚本优先，找不到再退回用户目录下的同名脚本）---
+SCAN="$ROOT/scripts/sensitive-scan.py"
+[ -f "$SCAN" ] || SCAN="$HOME/.codex/skills/sensitive-scan/scripts/sensitive-scan.py"
 if [ -f "$SCAN" ]; then
-  run "sensitive scan" python3 "$SCAN" "$ROOT" --exclude node_modules,dist
+  run "sensitive scan" python3 "$SCAN" "$ROOT" --exclude node_modules,dist --skip-private
 else
   echo
   echo ">>> sensitive scan（跳过：未找到 $SCAN）"

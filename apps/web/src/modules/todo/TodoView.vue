@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { Check, Pencil, Plus, Trash2, X } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import { Check, Plus, Trash2, X } from 'lucide-vue-next'
 
 import { canonicalCourseIds } from '../../core/courses'
 import { sync } from '../../core/sync'
-import { db, type CourseRow, type TermRow, type TodoPriority, type TodoRow, type TodoStatus } from '../../db/db'
+import { db, type CourseRow, type TermRow, type TodoRow, type TodoStatus } from '../../db/db'
+import TimelineView from '../timeline/TimelineView.vue'
 import {
   decodeTags,
-  encodeTags,
   formatDue,
   isDoneStatus,
   isOverdue,
@@ -15,22 +16,15 @@ import {
   sortTodos,
 } from './derive'
 
-const PRIORITY_OPTIONS: { value: TodoPriority; label: string }[] = [
-  { value: 2, label: PRIORITY_LABELS[2] },
-  { value: 1, label: PRIORITY_LABELS[1] },
-  { value: 0, label: PRIORITY_LABELS[0] },
-]
+const route = useRoute()
+const router = useRouter()
 
 interface TodoForm {
-  id: string | null
   title: string
   courseId: string
   dueDate: string
   dueTime: string
   allDay: boolean
-  priority: TodoPriority
-  tags: string
-  remindEnabled: boolean
 }
 
 const todos = ref<TodoRow[]>([])
@@ -70,6 +64,14 @@ const activeTermGroups = computed(() => {
 })
 const courseNames = computed(() => new Map(courses.value.map((course) => [course.id, course.name])))
 const hasTodos = computed(() => activeTodos.value.length > 0 || completedTodos.value.length > 0)
+const showingByDate = computed(() => route.query.view === 'date')
+
+function setTodoView(view: 'list' | 'date') {
+  void router.replace({
+    path: '/todo',
+    query: view === 'date' ? { ...route.query, view: 'date' } : {},
+  })
+}
 
 let unsubscribeSync: (() => void) | null = null
 let undoTimer: ReturnType<typeof setTimeout> | null = null
@@ -102,15 +104,11 @@ function manualSort(items: TodoRow[]): TodoRow[] {
 
 function emptyForm(): TodoForm {
   return {
-    id: null,
     title: '',
     courseId: '',
     dueDate: '',
     dueTime: '',
     allDay: true,
-    priority: 1,
-    tags: '',
-    remindEnabled: true,
   }
 }
 
@@ -129,23 +127,6 @@ function clearFeedback() {
 function openCreate() {
   clearFeedback()
   Object.assign(form, emptyForm())
-  editorOpen.value = true
-}
-
-function openEdit(todo: TodoRow) {
-  clearFeedback()
-  const dueAt = todo.due_at ?? ''
-  Object.assign(form, {
-    id: todo.id,
-    title: todo.title,
-    courseId: todo.course_id ?? '',
-    dueDate: dueAt.slice(0, 10),
-    dueTime: dueAt.includes('T') ? dueAt.slice(11, 16) : '',
-    allDay: todo.due_all_day === 1 || !dueAt.includes('T'),
-    priority: todo.priority,
-    tags: decodeTags(todo.tags).join('，'),
-    remindEnabled: todo.remind_mode !== 'off',
-  })
   editorOpen.value = true
 }
 
@@ -174,55 +155,40 @@ async function saveTodo() {
     error.value = '非全天待办请填写截止时间'
     return
   }
-  const previous = form.id ? todos.value.find((todo) => todo.id === form.id) ?? null : null
-  const status: TodoStatus = previous && isDoneStatus(previous.status) ? '1' : '0'
   const fields = {
     course_id: form.courseId || null,
     title,
     due_at: dueValue(),
     due_all_day: form.dueDate ? (form.allDay ? 1 : 0) : 1,
-    status,
-    done_at: doneValue(status, previous),
-    priority: form.priority,
-    tags: encodeTags(form.tags),
-    remind_mode: form.remindEnabled ? 'inherit' : 'off',
+    status: '0' as const,
+    done_at: null,
+    priority: 1 as const,
+    tags: '[]',
+    remind_mode: 'inherit',
     remind_offsets: null,
   }
-  if (previous) {
-    await sync.localWrite('todo', previous.id, fields, previous._rev)
-    Object.assign(previous, fields)
-    message.value = '待办已保存'
-  } else {
-    const id = crypto.randomUUID()
-    const createdAt = new Date().toISOString()
-    const createdFields = {
-      ...fields,
-      kind: 'todo',
-      body: '{}',
-      body_text: '',
-      start_at: null,
-      repeat: null,
-      remind_mode: form.remindEnabled ? 'inherit' : 'off',
-      remind_offsets: null,
-      sort_order: todos.value.length,
-      created_at: createdAt,
-    }
-    const created = {
-      ...createdFields,
-      id,
-      _rev: 0,
-      _updated_at: null,
-      _deleted_at: null,
-    } as TodoRow
-    await sync.localWrite(
-      'todo',
-      id,
-      createdFields,
-      0,
-    )
-    todos.value = [...todos.value, created]
-    message.value = '待办已创建'
+  const id = crypto.randomUUID()
+  const createdAt = new Date().toISOString()
+  const createdFields = {
+    ...fields,
+    kind: 'todo',
+    body: '{}',
+    body_text: '',
+    start_at: null,
+    repeat: null,
+    sort_order: todos.value.length,
+    created_at: createdAt,
   }
+  const created = {
+    ...createdFields,
+    id,
+    _rev: 0,
+    _updated_at: null,
+    _deleted_at: null,
+  } as TodoRow
+  await sync.localWrite('todo', id, createdFields, 0)
+  todos.value = [...todos.value, created]
+  message.value = '待办已创建'
   closeEditor()
 }
 
@@ -301,9 +267,10 @@ function priorityClass(priority: number): string {
     <div class="view-head">
       <div>
         <h1>待办</h1>
-        <p>把课程作业和日常杂事放在一起，离线也能先记下来。</p>
+        <p v-if="!showingByDate">把要做的事放在一起，离线也能先记下来。</p>
       </div>
       <button
+        v-if="!showingByDate"
         class="primary-btn add-btn"
         type="button"
         @click="openCreate"
@@ -316,7 +283,33 @@ function priorityClass(priority: number): string {
       </button>
     </div>
 
-    <div class="todo-toolbar">
+    <nav
+      class="todo-view-tabs"
+      aria-label="待办显示方式"
+    >
+      <button
+        type="button"
+        :aria-pressed="!showingByDate"
+        :class="{ active: !showingByDate }"
+        @click="setTodoView('list')"
+      >清单</button>
+      <button
+        type="button"
+        :aria-pressed="showingByDate"
+        :class="{ active: showingByDate }"
+        @click="setTodoView('date')"
+      >按日期</button>
+    </nav>
+
+    <TimelineView
+      v-if="showingByDate"
+      embedded
+    />
+
+    <div
+      v-if="!showingByDate"
+      class="todo-toolbar"
+    >
       <label class="search-box">
         <span class="sr-only">搜索待办</span>
         <input
@@ -346,7 +339,7 @@ function priorityClass(priority: number): string {
     </div>
 
     <div
-      v-if="message"
+      v-if="!showingByDate && message"
       class="feedback success"
       role="status"
     >
@@ -359,17 +352,17 @@ function priorityClass(priority: number): string {
       >撤销</button>
     </div>
     <div
-      v-if="error"
+      v-if="!showingByDate && error"
       class="feedback error"
       role="alert"
     >{{ error }}</div>
 
     <div
-      v-if="!loaded"
+      v-if="!showingByDate && !loaded"
       class="state-card"
     >正在读取本地待办…</div>
     <div
-      v-else-if="!hasTodos"
+      v-if="!showingByDate && loaded && !hasTodos"
       class="empty-card"
     >
       <Check
@@ -386,7 +379,7 @@ function priorityClass(priority: number): string {
     </div>
 
     <div
-      v-if="activeTodos.length"
+      v-if="!showingByDate && activeTodos.length"
       class="todo-list"
     >
       <article
@@ -416,6 +409,7 @@ function priorityClass(priority: number): string {
           <div class="todo-title-row">
             <h2>{{ todo.title }}</h2>
             <span
+              v-if="todo.priority !== 1"
               class="priority-pill"
               :class="priorityClass(todo.priority)"
             >{{ priorityLabel(todo.priority) }}</span>
@@ -436,17 +430,6 @@ function priorityClass(priority: number): string {
           </div>
         </RouterLink>
         <button
-          class="icon-action"
-          type="button"
-          :aria-label="`编辑：${todo.title}`"
-          @click="openEdit(todo)"
-        >
-          <Pencil
-            :size="16"
-            aria-hidden="true"
-          />
-        </button>
-        <button
           class="icon-action danger"
           type="button"
           :aria-label="`删除：${todo.title}`"
@@ -461,7 +444,7 @@ function priorityClass(priority: number): string {
     </div>
 
     <details
-      v-if="completedTodos.length"
+      v-if="!showingByDate && completedTodos.length"
       class="completed-section"
     >
       <summary>已完成（{{ completedTodos.length }}）</summary>
@@ -498,17 +481,6 @@ function priorityClass(priority: number): string {
             </div>
           </RouterLink>
           <button
-            class="icon-action"
-            type="button"
-            :aria-label="`编辑：${todo.title}`"
-            @click="openEdit(todo)"
-          >
-            <Pencil
-              :size="16"
-              aria-hidden="true"
-            />
-          </button>
-          <button
             class="icon-action danger"
             type="button"
             :aria-label="`删除：${todo.title}`"
@@ -524,7 +496,7 @@ function priorityClass(priority: number): string {
     </details>
 
     <div
-      v-if="editorOpen"
+      v-if="!showingByDate && editorOpen"
       class="dialog-backdrop"
       @click.self="closeEditor"
     >
@@ -533,7 +505,7 @@ function priorityClass(priority: number): string {
         @submit.prevent="saveTodo"
       >
         <div class="dialog-head">
-          <h2>{{ form.id ? '编辑待办' : '新建待办' }}</h2>
+          <h2>新建待办</h2>
           <button
             class="close-btn"
             type="button"
@@ -604,32 +576,6 @@ function priorityClass(priority: number): string {
             >
           </label>
 
-          <label class="field">
-            <span>优先级</span>
-            <select
-              :value="form.priority"
-              @change="form.priority = Number(($event.target as HTMLSelectElement).value) as TodoPriority"
-            >
-              <option
-                v-for="option in PRIORITY_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-
-          <label class="field wide">
-            <span>标签</span>
-            <input
-              v-model="form.tags"
-              placeholder="多个标签用逗号分隔，如：作业，重要"
-            >
-          </label>
-          <label class="field wide checkbox-field reminder-toggle">
-            <span>待办提醒</span>
-            <input v-model="form.remindEnabled" type="checkbox">
-            <small class="field-hint">默认在截止前一天提醒；关闭后仅影响这一条待办。</small>
-          </label>
         </div>
 
         <div class="dialog-actions">
@@ -650,6 +596,9 @@ function priorityClass(priority: number): string {
 
 <style scoped>
 .todo-view { padding-top: 4px; }
+.todo-view-tabs { display: flex; gap: 18px; margin: 14px 0 18px; border-bottom: 1px solid var(--line); }
+.todo-view-tabs button { min-height: 38px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; }
+.todo-view-tabs button.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
 .add-btn, .primary-btn, .ghost-btn, .icon-action, .close-btn, .todo-check { border: 0; font: inherit; cursor: pointer; }
 .add-btn, .primary-btn, .ghost-btn { min-height: 38px; padding: 0 13px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
 .primary-btn { background: var(--accent); color: var(--on-accent); font-weight: 600; }
@@ -674,7 +623,7 @@ function priorityClass(priority: number): string {
 .sort-btn, .recycle-link { min-height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
 .sort-btn.active, .sort-btn:hover, .recycle-link:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .recycle-link { display: inline-flex; align-items: center; }
-.todo-card { display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) 34px 34px; align-items: center; gap: 6px; min-height: 74px; padding: 12px 2px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; transition: background-color 180ms ease-out; }
+.todo-card { display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) 34px; align-items: center; gap: 6px; min-height: 74px; padding: 12px 2px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; transition: background-color 180ms ease-out; }
 .todo-card:hover { background: color-mix(in srgb, var(--text) 3%, var(--bg)); }
 .todo-card.overdue .todo-index { color: var(--danger); }
 .todo-card.completed .todo-title-row h2, .todo-card.completed .todo-meta { color: var(--text-secondary); }
@@ -719,7 +668,7 @@ function priorityClass(priority: number): string {
 @media (max-width: 620px) {
   .view-head { flex-direction: column; }
   .add-btn { align-self: flex-start; }
-  .todo-card { grid-template-columns: 23px 22px minmax(0, 1fr) 30px 30px; gap: 4px; }
+  .todo-card { grid-template-columns: 23px 22px minmax(0, 1fr) 30px; gap: 4px; }
   .todo-index { font-size: 11px; }
   .todo-title-row { align-items: flex-start; flex-wrap: wrap; }
   .todo-title-row h2 { white-space: normal; }

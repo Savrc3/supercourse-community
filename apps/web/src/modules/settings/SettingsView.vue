@@ -9,6 +9,7 @@ import { isLocalMode } from '../../core/connection'
 import { useAppStore } from '../../stores/app'
 import { COURSE_PALETTE } from '../timetable/coursePalette'
 import ReminderSettingsPanel from './ReminderSettingsPanel.vue'
+import ProfileView from '../profile/ProfileView.vue'
 
 const PALETTE = COURSE_PALETTE
 const appStore = useAppStore()
@@ -473,8 +474,8 @@ async function importBackup(event: Event) {
   <section class="manage">
     <header class="view-head">
       <div>
-        <h1>管理</h1>
-        <p>学期、课程资料和单次课表变化</p>
+        <h1>设置</h1>
+        <p>账户、提醒、课程资料与数据恢复</p>
       </div>
       <RouterLink
         v-if="!isLocalMode()"
@@ -497,6 +498,7 @@ async function importBackup(event: Event) {
       class="state-pill"
     >正在加载管理数据…</div>
     <template v-else>
+      <ProfileView embedded />
       <section class="panel">
         <div class="section-head">
           <div>

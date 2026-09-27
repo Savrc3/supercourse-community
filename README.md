@@ -4,7 +4,7 @@
 
 本项目的定位是一个可自行带走、运行和修改的开源工具，不是公共 SaaS，也不提供维护者的个人服务器作为默认后端。使用者可以把它当作本地课表，也可以按文档部署自己的同步服务；公开版本不承诺持续在线服务或长期兼容维护。
 
-Windows 轻量桌面版 2.0.1 已发布：[下载 Windows x64 安装包](https://github.com/Savrc3/supercourse-community/releases/download/v2.0.1/SuperCourse-Lite-2.0.1-x64-setup.exe)。它与旧 Electron 版使用不同的本地数据目录；远程模式迁移前先确认旧版待传队列为 0，再在新版连接同一服务器登录；本地模式请先导出备份再导入。本次更新仅针对 Windows，Android 和 Web/API 仍为 2.0.0。
+课序 2.0.2 已发布，包含精简后的「课表 / 待办 / 设置」导航、待办清单与按日期视图，以及更轻量的待办快速创建。Windows 轻量桌面版可从 [下载页](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.2)获取；Android APK 也在该 Release 中。Windows 版与旧 Electron 版使用不同的本地数据目录；远程模式迁移前先确认旧版待传队列为 0，再在新版连接同一服务器登录；本地模式请先导出备份再导入。
 
 ## 作者说明
 

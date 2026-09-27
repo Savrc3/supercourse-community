@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   localWrite: vi.fn().mockResolvedValue(undefined),
   subscribeChanges: vi.fn().mockReturnValue(() => undefined),
   subscribe: vi.fn().mockReturnValue(() => undefined),
+  route: { query: {} as Record<string, string> },
+  router: { push: vi.fn().mockResolvedValue(undefined), replace: vi.fn().mockResolvedValue(undefined) },
 }))
 
 vi.mock('../../core/sync', () => ({ sync: mocks }))
@@ -26,6 +28,7 @@ vi.mock('../../db/db', () => ({
   },
 }))
 vi.mock('../../stores/app', () => ({ useAppStore: () => mocks.appStore }))
+vi.mock('vue-router', () => ({ useRoute: () => mocks.route, useRouter: () => mocks.router }))
 
 import TimetableView from './TimetableView.vue'
 
@@ -47,6 +50,9 @@ describe('TimetableView 周视图布局', () => {
     mocks.slots.length = 0
     mocks.periods.length = 0
     mocks.overrides.length = 0
+    mocks.route.query = {}
+    mocks.router.push.mockClear()
+    mocks.router.replace.mockClear()
     mocks.appStore = reactive({ mobileView: 'week', selectedTermId: null })
     mocks.localWrite.mockClear()
     mocks.subscribe.mockClear()
@@ -188,6 +194,40 @@ describe('TimetableView 周视图布局', () => {
     expect(mocks.appStore.mobileView).toBe('day')
     expect(wrapper.findAll('.day-course')).toHaveLength(2)
     expect(wrapper.find('.day-course-group').attributes('style')).toContain('grid-template-columns: repeat(2')
+    wrapper.unmount()
+  })
+
+  it('点击课程卡打开详情，并传递课程安排日期', async () => {
+    mocks.terms.push({
+      id: 'term-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      name: '2026-2027-1', label: null, start_date: '2026-08-31', weeks_total: 20,
+      is_current: 1, archived_at: null,
+    })
+    mocks.courses.push({
+      id: 'course-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      term_id: 'term-1', name: '高等数学', short_name: null, teacher: null,
+      code: null, color: 0, credit: null, exam_at: null, exam_room: null,
+      exam_note: null, textbook: null, grade_breakdown: null, note: null, sort_order: 0,
+    })
+    mocks.slots.push({
+      id: 'slot-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      course_id: 'course-1', weekday: 1, start_lesson: 1, end_lesson: 2,
+      room: 'A301', weeks: '{"ranges":[[1,20]],"only":[],"except":[],"parity":"all"}',
+    })
+    mocks.periods.push({
+      id: 'period-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      term_id: 'term-1', lesson_no: 1, start_time: '08:00', end_time: '08:50', big_period: 1,
+    })
+
+    const wrapper = mount(TimetableView)
+    await flushPromises()
+    await wrapper.find('.week-course').trigger('click')
+
+    expect(mocks.router.push).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'course-detail',
+      params: { id: 'course-1' },
+      query: { date: '2026-09-21', slotId: 'slot-1' },
+    }))
     wrapper.unmount()
   })
 

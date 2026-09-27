@@ -115,6 +115,16 @@ function startEdit() {
   editing.value = true
 }
 
+function returnToTimetable() {
+  const date = typeof route.query.date === 'string' ? route.query.date : undefined
+  void router.push({ path: '/', query: date ? { date } : {} })
+}
+
+function editSlot(slot: CourseSlotRow) {
+  const date = typeof route.query.date === 'string' ? route.query.date : undefined
+  void router.push({ path: '/', query: { editSlot: slot.id, ...(date ? { date } : {}) } })
+}
+
 async function save() {
   if (!course.value || !form.teacher.trim() && !form.textbook.trim() && !form.note.trim() && !form.examAt.trim() && !form.examRoom.trim() && !form.examNote.trim() && !form.gradeBreakdown.trim()) {
     if (!course.value) return
@@ -151,11 +161,11 @@ async function save() {
         <button
           class="back-btn"
           type="button"
-          @click="router.push('/settings')"
+          @click="returnToTimetable"
         ><ArrowLeft
           :size="17"
           aria-hidden="true"
-        />返回管理</button>
+        />返回课表</button>
         <button
           v-if="!editing"
           class="ghost-btn"
@@ -220,6 +230,25 @@ async function save() {
         v-else
         class="detail-grid"
       >
+        <section class="panel">
+          <h2>上课安排</h2>
+          <p
+            v-if="!slots.length"
+            class="muted"
+          >还没有固定上课时间。</p>
+          <div
+            v-for="slot in slots"
+            :key="slot.id"
+            class="schedule-row"
+          >
+            <span>周{{ ['一', '二', '三', '四', '五', '六', '日'][slot.weekday - 1] }} · 第{{ slot.start_lesson }}–{{ slot.end_lesson }}节 · {{ slot.room || '未设教室' }}</span>
+            <button
+              class="ghost-btn"
+              type="button"
+              @click="editSlot(slot)"
+            >编辑安排</button>
+          </div>
+        </section>
         <section class="panel info-panel">
           <h2>课程资料</h2>
           <dl>
@@ -295,8 +324,10 @@ label.wide, .wide { grid-column: 1 / -1; }
 input, textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
 .todo-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--text); font-size: 13px; }
 .todo-row small { color: var(--text-secondary); } .todo-row.done { color: var(--text-secondary); text-decoration: line-through; }
+.schedule-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 13px; }
+.schedule-row:last-child { border-bottom: 0; }
 .done-list { margin-top: 10px; } summary { color: var(--text-secondary); cursor: pointer; font-size: 13px; }
 .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
 .media-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; }
-@media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } .detail-grid > .panel:last-child { grid-column: auto; } .form-grid { grid-template-columns: 1fr; } label.wide, .wide { grid-column: auto; } }
+@media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } .detail-grid > .panel:last-child { grid-column: auto; } .schedule-row { align-items: flex-start; flex-direction: column; } .form-grid { grid-template-columns: 1fr; } label.wide, .wide { grid-column: auto; } }
 </style>

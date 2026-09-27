@@ -61,6 +61,40 @@ test('首次访问进入模式向导，不阻塞于网络', async ({ page }) => 
   await expect(page.locator('.week-grid')).toHaveCount(0)
 })
 
+test('主导航收为三项，时间线并入待办且旧链接仍可用', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /本地使用/ }).click()
+
+  await expect(page.locator('.mobile-nav .mobile-tab')).toHaveCount(3)
+  await expect(page.locator('.desktop-nav .desktop-link')).toHaveCount(3)
+  await page.getByRole('link', { name: '待办', exact: true }).first().click()
+  await expect(page.getByRole('navigation', { name: '待办显示方式' })).toBeVisible()
+  await page.getByRole('button', { name: '按日期' }).click()
+  await expect(page.locator('.timeline-view')).toBeVisible()
+  await expect(page).toHaveURL(/\/todo\?view=date/)
+
+  await page.goto('/timeline')
+  await expect(page).toHaveURL(/\/todo\?view=date/)
+  await expect(page.locator('.timeline-view')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('todo-by-date.png') })
+
+  await page.getByRole('button', { name: '清单' }).click()
+  await page.getByRole('button', { name: '新建待办' }).click()
+  await expect(page.getByRole('heading', { name: '新建待办' })).toBeVisible()
+  await expect(page.getByText('优先级', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('标签', { exact: true })).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('todo-quick-create.png') })
+
+  await page.getByRole('button', { name: '关闭' }).click()
+  await page.getByRole('link', { name: '设置', exact: true }).first().click()
+  await expect(page.getByRole('heading', { name: '账户与设备' })).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('settings-overview.png') })
+
+  await page.goto('/profile')
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page.getByRole('heading', { name: '账户与设备' })).toBeVisible()
+})
+
 test('配对页可访问', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('sc_connection_profile', JSON.stringify({ mode: 'remote', serverUrl: 'http://localhost:8090/api' }))

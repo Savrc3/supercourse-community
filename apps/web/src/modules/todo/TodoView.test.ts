@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => {
     localWrite: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockReturnValue(() => undefined),
     subscribeChanges: vi.fn().mockReturnValue(() => undefined),
+    route: { query: {} as Record<string, string> },
+    router: { replace: vi.fn().mockResolvedValue(undefined) },
   }
   return {
     ...state,
@@ -20,6 +22,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../../core/sync', () => ({ sync: mocks }))
 vi.mock('../../db/db', () => ({ db: mocks.db }))
+vi.mock('vue-router', () => ({ useRoute: () => mocks.route, useRouter: () => mocks.router }))
 
 import TodoView from './TodoView.vue'
 
@@ -58,9 +61,11 @@ describe('TodoView 待办操作', () => {
     mocks.db.todo.toArray.mockClear()
     mocks.db.term.toArray.mockClear()
     mocks.db.course.toArray.mockClear()
+    mocks.route.query = {}
+    mocks.router.replace.mockClear()
   })
 
-  it('新增待办时写入结构化截止时间、优先级和标签', async () => {
+  it('快速新增只要求标题，并保留可选课程与截止时间', async () => {
     const wrapper = mount(TodoView, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
@@ -71,8 +76,6 @@ describe('TodoView 待办操作', () => {
     await wrapper.get('input[type="date"]').setValue('2026-09-08')
     await wrapper.get('input[type="checkbox"]').setValue(false)
     await wrapper.get('input[type="time"]').setValue('14:30')
-    await wrapper.findAll('.field select')[1].setValue('2')
-    await wrapper.get('input[placeholder="多个标签用逗号分隔，如：作业，重要"]').setValue('作业，重要，作业')
     await wrapper.get('form').trigger('submit')
 
     expect(mocks.localWrite).toHaveBeenCalledWith(
@@ -84,32 +87,22 @@ describe('TodoView 待办操作', () => {
         due_at: '2026-09-08T14:30',
         due_all_day: 0,
         status: '0',
-        priority: 2,
-        tags: '["作业","重要"]',
+        priority: 1,
+        tags: '[]',
+        remind_mode: 'inherit',
       }),
       0,
     )
   })
 
-  it('编辑、完成和删除都通过 localWrite 落库', async () => {
+  it('完成和删除都通过 localWrite 落库，编辑留在详情页', async () => {
     mocks.todos.push(todo())
     const wrapper = mount(TodoView, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
     await flushPromises()
 
-    await wrapper.get('button[aria-label="编辑：原待办"]').trigger('click')
-    await wrapper.get('input[placeholder="如：完成高数第三章习题"]').setValue('改过的待办')
-    await wrapper.get('form').trigger('submit')
-    expect(mocks.localWrite).toHaveBeenLastCalledWith(
-      'todo',
-      'todo-1',
-      expect.objectContaining({ title: '改过的待办' }),
-      1,
-    )
-
-    mocks.localWrite.mockClear()
-    await wrapper.get('button[aria-label="完成：改过的待办"]').trigger('click')
+    await wrapper.get('button[aria-label="完成：原待办"]').trigger('click')
     expect(mocks.localWrite).toHaveBeenCalledWith(
       'todo',
       'todo-1',
@@ -119,7 +112,7 @@ describe('TodoView 待办操作', () => {
 
     mocks.localWrite.mockClear()
     vi.stubGlobal('confirm', vi.fn(() => true))
-    await wrapper.get('button[aria-label="删除：改过的待办"]').trigger('click')
+    await wrapper.get('button[aria-label="删除：原待办"]').trigger('click')
     expect(mocks.localWrite).toHaveBeenCalledWith('todo', 'todo-1', {}, 1, true)
     vi.unstubAllGlobals()
   })
@@ -151,5 +144,16 @@ describe('TodoView 待办操作', () => {
     await flushPromises()
 
     expect(wrapper.get('.completed-section summary').text()).toBe('已完成（1）')
+  })
+
+  it('待办页能切换清单和按日期，并保留旧时间线入口', async () => {
+    const wrapper = mount(TodoView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    await flushPromises()
+
+    await wrapper.get('.todo-view-tabs button:nth-child(2)').trigger('click')
+    expect(mocks.router.replace).toHaveBeenCalledWith({ path: '/todo', query: { view: 'date' } })
+    wrapper.unmount()
   })
 })

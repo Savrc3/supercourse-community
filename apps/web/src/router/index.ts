@@ -13,6 +13,8 @@ export const router = createRouter({
           component: module.component,
         }) as RouteRecordRaw,
     ),
+    { path: '/timeline', redirect: { path: '/todo', query: { view: 'date' } } },
+    { path: '/profile', redirect: '/settings' },
     {
       path: '/pair',
       name: 'pair',

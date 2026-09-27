@@ -54,6 +54,13 @@ const navItems = computed(() =>
     .sort((a, b) => a.order - b.order)
     .map((module) => ({ ...module, icon: icons[module.icon] })),
 )
+
+function isNavActive(id: string, path: string): boolean {
+  if (id === 'timetable') return route.path === '/' || route.path.startsWith('/courses/')
+  if (id === 'todo') return route.path.startsWith('/todo') || route.path === '/timeline'
+  if (id === 'settings') return ['/settings', '/profile', '/conflicts', '/diagnostics', '/reminders'].includes(route.path)
+  return route.path === path
+}
 </script>
 
 <template>
@@ -81,7 +88,7 @@ const navItems = computed(() =>
           v-for="item in navItems"
           :key="item.id"
           class="desktop-link"
-          :class="{ active: route.path === item.path }"
+          :class="{ active: isNavActive(item.id, item.path) }"
           :to="item.path"
         >
           <component
@@ -149,7 +156,7 @@ const navItems = computed(() =>
         v-for="item in navItems"
         :key="item.id"
         class="mobile-tab"
-        :class="{ active: route.path === item.path }"
+        :class="{ active: isNavActive(item.id, item.path) }"
         :to="item.path"
       >
         <component

@@ -8,6 +8,8 @@ import { getDesktopVersion, isDesktopShell } from '../../core/desktop'
 import { apiFetch } from '../../core/http'
 import { sync } from '../../core/sync'
 
+const props = defineProps<{ embedded?: boolean }>()
+
 interface Device {
   id: string
   name: string | null
@@ -132,14 +134,21 @@ onMounted(() => {
 
 <template>
   <section class="profile">
-    <header class="view-head">
+    <h2
+      v-if="props.embedded"
+      class="embedded-heading"
+    >账户与设备</h2>
+    <header
+      v-else
+      class="view-head"
+    >
       <div>
         <h1>我的</h1>
         <p>账号下的设备会自动同步</p>
       </div>
     </header>
 
-      <div class="panel">
+    <div class="panel">
       <h2>设备</h2>
       <p
         v-if="!loaded"

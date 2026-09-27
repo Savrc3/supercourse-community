@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import {
   db,
@@ -32,6 +33,8 @@ import { detectHorizontalSwipe, type SwipePoint } from './swipe'
 import { COURSE_PALETTE } from './coursePalette'
 
 const appStore = useAppStore()
+const route = useRoute()
+const router = useRouter()
 
 const term = ref<TermRow | null>(null)
 const courses = ref<CourseRow[]>([])
@@ -75,6 +78,11 @@ onMounted(async () => {
   scheduleMidnightRefresh()
   document.addEventListener('visibilitychange', handleVisibilityChange)
   await load()
+  const editSlot = typeof route.query.editSlot === 'string' ? route.query.editSlot : ''
+  if (editSlot) {
+    openEditEditor(editSlot)
+    await router.replace({ path: '/', query: route.query.date ? { date: route.query.date } : {} })
+  }
   // 同步完成后只在相关实体真正变化时重新读库。
   unsubscribeSync = sync.subscribeChanges((changes) => {
     if (!changes.some(({ entity }) => ['term', 'course', 'course_slot', 'lesson_period', 'timetable_override'].includes(entity))) return
@@ -149,6 +157,8 @@ function handleVisibilityChange() {
 
 function initialDateForTerm(): string {
   if (!term.value) return actualToday.value
+  const requestedDate = typeof route.query.date === 'string' ? route.query.date : ''
+  if (requestedDate && isDateInTerm(term.value.start_date, term.value.weeks_total, requestedDate)) return requestedDate
   if (isDateInTerm(term.value.start_date, term.value.weeks_total, actualToday.value)) return actualToday.value
   const { sunday } = weekDates(term.value.start_date, term.value.weeks_total)
   return actualToday.value < term.value.start_date ? term.value.start_date : sunday
@@ -156,9 +166,18 @@ function initialDateForTerm(): string {
 
 function initialiseNavigation() {
   if (!term.value) return
-  week.value = currentWeek(term.value.start_date, actualToday.value, term.value.weeks_total)
   selectedDate.value = initialDateForTerm()
+  week.value = currentWeek(term.value.start_date, selectedDate.value, term.value.weeks_total)
   navigationTermId = term.value.id
+}
+
+function openCourseDetails(courseId: string, slotId: string, weekday: number) {
+  const date = header.value.find((item) => item.weekday === weekday)?.date ?? selectedDate.value
+  void router.push({
+    name: 'course-detail',
+    params: { id: courseId },
+    query: { date, slotId },
+  })
 }
 
 const actualWeek = computed(() => {
@@ -770,9 +789,9 @@ async function deleteEditorSlot() {
                   }"
                   role="button"
                   tabindex="0"
-                  :aria-label="`编辑${layout.block.displayName}`"
-                  @click="openEditEditor(layout.block.slotId)"
-                  @keydown.enter="openEditEditor(layout.block.slotId)"
+                  :aria-label="`查看${layout.block.displayName}详情`"
+                  @click="openCourseDetails(layout.block.courseId, layout.block.slotId, layout.block.weekday)"
+                  @keydown.enter="openCourseDetails(layout.block.courseId, layout.block.slotId, layout.block.weekday)"
                 >
                   <strong>{{ layout.block.displayName }}</strong>
                   <span>{{ layout.block.room || '未设置教室' }}</span>
@@ -857,9 +876,9 @@ async function deleteEditorSlot() {
                     }"
                     role="button"
                     tabindex="0"
-                    :aria-label="`编辑${layout.block.displayName}`"
-                    @click="openEditEditor(layout.block.slotId)"
-                    @keydown.enter="openEditEditor(layout.block.slotId)"
+                    :aria-label="`查看${layout.block.displayName}详情`"
+                    @click="openCourseDetails(layout.block.courseId, layout.block.slotId, layout.block.weekday)"
+                    @keydown.enter="openCourseDetails(layout.block.courseId, layout.block.slotId, layout.block.weekday)"
                   >
                     <span class="wc-name">{{ layout.block.displayName }}</span>
                     <span class="wc-room">{{ layout.block.room || '' }}</span>

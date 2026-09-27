@@ -4,6 +4,8 @@ import { db, type CourseRow, type TodoRow } from '../../db/db'
 import { sync } from '../../core/sync'
 import { decodeTags, formatDue, isDoneStatus, sortTodos } from '../todo/derive'
 
+defineProps<{ embedded?: boolean }>()
+
 const todos = ref<TodoRow[]>([])
 const courses = ref<CourseRow[]>([])
 const loaded = ref(false)
@@ -57,7 +59,7 @@ onUnmounted(() => {
 
 <template>
   <section class="timeline-view">
-    <header class="view-head"><div><h1>时间线</h1><p>按截止时间查看接下来要处理的事情。</p></div><RouterLink
+    <header v-if="!embedded" class="view-head"><div><h1>按日期</h1><p>按截止时间查看接下来要处理的事情。</p></div><RouterLink
       class="reminder-link"
       to="/reminders"
     >提醒展示</RouterLink></header>

@@ -1,9 +1,12 @@
 /** 同步客户端：本地优先 + 串行后台同步 + 增量拉取 + SSE 订阅。 */
 
 import type { Table } from 'dexie'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 import { db, type SyncShadowRow } from '../../db/db'
 import { getApiBase } from '../http'
+import { platformFetch } from '../platform-fetch'
 import { isLocalMode } from '../connection'
 
 const TOKEN_KEY = 'sc_token'
@@ -74,6 +77,8 @@ export class SyncClient {
   private baseUrl: string
   private cursor: number = 0
   private eventSource: EventSource | null = null
+  private tauriEventUnlisten: UnlistenFn | null = null
+  private eventRelayGeneration = 0
   private pollTimer: number | null = null
   private syncTimer: number | null = null
   private syncingTimer: number | null = null
@@ -171,7 +176,7 @@ export class SyncClient {
   }
 
   private async request(path: string, init?: RequestInit): Promise<Response> {
-    const resp = await fetch(`${this.baseUrl}${path}`, {
+    const resp = await platformFetch(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
@@ -361,7 +366,7 @@ export class SyncClient {
     form.append('id', id)
     form.append('sha256', sha256)
     form.append('file', file, filename)
-    const resp = await fetch(`${this.baseUrl}/media`, {
+    const resp = await platformFetch(`${this.baseUrl}/media`, {
       method: 'POST',
       body: form,
       headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
@@ -377,9 +382,10 @@ export class SyncClient {
       this.stop()
       return
     }
-    if (this.eventSource) this.eventSource.close()
+    this.stop(false)
     const token = this.token
-    this.eventSource = token
+    if (token && isTauri()) void this.startTauriEvents(token, this.eventRelayGeneration)
+    this.eventSource = token && !isTauri()
       ? new EventSource(`${this.baseUrl}/events?token=${encodeURIComponent(token)}`)
       : null
     if (this.eventSource) {
@@ -406,7 +412,11 @@ export class SyncClient {
     if (token) this.scheduleSync(0)
   }
 
-  stop() {
+  stop(stopRelay = true) {
+    this.eventRelayGeneration += 1
+    this.tauriEventUnlisten?.()
+    this.tauriEventUnlisten = null
+    if (stopRelay && isTauri()) void invoke('desktop_stop_events').catch(() => undefined)
     this.eventSource?.close()
     this.eventSource = null
     if (this.pollTimer) clearInterval(this.pollTimer)
@@ -417,6 +427,24 @@ export class SyncClient {
     this.syncingTimer = null
     this.syncQueued = false
     this.stopWindowListeners()
+  }
+
+  private async startTauriEvents(token: string, generation: number) {
+    try {
+      const unlisten = await listen<string>('desktop-sync-event', ({ payload }) => {
+        if (generation !== this.eventRelayGeneration) return
+        if (payload === 'change') this.scheduleSync(SSE_SYNC_DELAY_MS, false, true)
+        if (payload === 'hello') this.setOnline(true)
+      })
+      if (generation !== this.eventRelayGeneration) {
+        unlisten()
+        return
+      }
+      this.tauriEventUnlisten = unlisten
+      await invoke('desktop_start_events', { baseUrl: this.baseUrl, token })
+    } catch {
+      // SSE 失败仍保留五分钟轮询与聚焦同步；同步 HTTP 错误由 performSync 处理。
+    }
   }
 
   async syncNow() {

@@ -1,0 +1,15 @@
+{
+  "name": "@supercourse/desktop-tauri",
+  "private": true,
+  "version": "2.0.1",
+  "description": "课序 Windows 轻量桌面端",
+  "scripts": {
+    "dev": "tauri dev",
+    "icons": "tauri icon ../web/public/pwa/icon-512.png --output src-tauri/icons",
+    "build": "tauri build",
+    "build:windows": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.4"
+  }
+}

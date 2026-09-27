@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "build:tauri": "vue-tsc -b && vite build --mode tauri",
     "preview": "vite preview",
     "typecheck": "vue-tsc -b --noEmit",
     "lint": "eslint .",
@@ -13,6 +14,11 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.8.0",
+    "@tauri-apps/plugin-autostart": "^2.5.0",
+    "@tauri-apps/plugin-http": "^2.5.0",
+    "@tauri-apps/plugin-notification": "^2.3.0",
+    "@tauri-apps/plugin-opener": "^2.5.0",
     "@capacitor-community/file-opener": "^6.0.1",
     "@capacitor/camera": "^6.1.2",
     "@capacitor/app": "^6.0.3",

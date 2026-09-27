@@ -33,7 +33,7 @@ TEXT_EXTENSIONS = {
 DEFAULT_EXCLUDES = {
     ".git", "node_modules", "dist", "data", ".venv", "__pycache__", ".pytest_cache",
     ".pytest-tmp", ".pytest-now", ".mypy_cache", ".ruff_cache", ".hypothesis",
-    "playwright-report", "test-results", "coverage", "logs", "build", ".gradle", "android",
+    "playwright-report", "test-results", "coverage", "logs", "build", "target", ".gradle", "android",
 }
 
 # 发布边界内本就私有的文件：只有 --skip-private 时才跳过

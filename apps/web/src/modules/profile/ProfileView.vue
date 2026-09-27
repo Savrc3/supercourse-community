@@ -4,6 +4,7 @@ import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 
 import { checkForAppUpdate, openAppUpdate } from '../../core/app-update'
+import { getDesktopVersion, isDesktopShell } from '../../core/desktop'
 import { apiFetch } from '../../core/http'
 import { sync } from '../../core/sync'
 
@@ -27,7 +28,7 @@ const updateUrl = ref<string | null>(null)
 const updateMessage = ref('')
 const checkingUpdate = ref(false)
 const installingUpdate = ref(false)
-const isDesktopApp = typeof window !== 'undefined' && Boolean((window as Window & { desktop?: { appVersion?: string } }).desktop?.appVersion)
+const isDesktopApp = isDesktopShell()
 
 async function loadDevices() {
   try {
@@ -122,6 +123,7 @@ async function installUpdate() {
 }
 
 onMounted(() => {
+  if (isDesktopApp) void getDesktopVersion().then((version) => { appVersion.value = version ?? '' })
   void loadDevices()
   if (Capacitor.isNativePlatform()) void CapacitorApp.getInfo().then((info) => { appVersion.value = info.version })
   void checkUpdate()

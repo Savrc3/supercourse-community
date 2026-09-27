@@ -55,11 +55,11 @@ npm run dev
 
 ```powershell
 npm run build --workspace @supercourse/web
-npm run build --workspace @supercourse/desktop
+npm run build:windows --workspace @supercourse/desktop-tauri
 npm run android:release --workspace @supercourse/mobile
 ```
 
-Windows 安装包在 `apps/desktop/dist/`；Android Release APK 由脚本输出到 Android 构建目录。正式签名材料只保存在本机受保护目录，不进入仓库。
+Windows 轻量安装包在 `apps/desktop-tauri/src-tauri/target/release/bundle/nsis/`；旧 Electron 回退版可用 `npm run build --workspace @supercourse/desktop` 构建。两者使用独立本地数据；从旧版迁移时，远程模式在旧版待传队列清空后用同一服务器账号登录，本地模式先导出备份再导入。Android Release APK 由脚本输出到 Android 构建目录。正式签名材料只保存在本机受保护目录，不进入仓库。
 
 ## 质量门禁
 

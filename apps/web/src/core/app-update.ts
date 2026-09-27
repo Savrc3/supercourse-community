@@ -4,22 +4,13 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { FileOpener } from '@capacitor-community/file-opener'
 
 import { apiFetch } from './http'
+import { getDesktopVersion, isDesktopShell, openDesktopExternal } from './desktop'
 
 export interface AppUpdateInfo {
   current: string
   latest: string
   url: string | null
   available: boolean
-}
-
-interface DesktopBridge {
-  appVersion?: string
-  openExternal?: (url: string) => Promise<void> | void
-}
-
-function desktopBridge(): DesktopBridge | null {
-  if (typeof window === 'undefined') return null
-  return (window as Window & { desktop?: DesktopBridge }).desktop ?? null
 }
 
 export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
@@ -33,17 +24,17 @@ export async function checkForAppUpdate(): Promise<AppUpdateInfo> {
     desktop?: string | null
     desktop_url?: string | null
   }
-  const desktop = desktopBridge()
+  const desktopVersion = await getDesktopVersion()
   const native = Capacitor.isNativePlatform()
   const current = native
     ? (await App.getInfo()).version
-    : desktop?.appVersion ?? data.web ?? data.api ?? '未知'
+    : desktopVersion ?? data.web ?? data.api ?? '未知'
   const latest = native
     ? data.android ?? data.api ?? current
-    : desktop?.appVersion
+    : desktopVersion
       ? data.desktop ?? data.web ?? data.api ?? current
       : data.web ?? data.api ?? current
-  const url = native ? data.android_url ?? null : desktop?.appVersion ? data.desktop_url ?? null : null
+  const url = native ? data.android_url ?? null : desktopVersion ? data.desktop_url ?? null : null
   return { current, latest, url, available: compareVersions(latest, current) > 0 }
 }
 
@@ -52,9 +43,8 @@ export async function openAppUpdate(url: string): Promise<void> {
     await downloadAndInstallAndroidUpdate(url)
     return
   }
-  const desktop = desktopBridge()
-  if (desktop?.openExternal) {
-    await desktop.openExternal(url)
+  if (isDesktopShell()) {
+    await openDesktopExternal(url)
     return
   }
   const opened = typeof window !== 'undefined' ? window.open(url, '_blank', 'noopener,noreferrer') : null

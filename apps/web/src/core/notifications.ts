@@ -9,6 +9,8 @@ import {
 } from '../modules/todo/reminder'
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification'
 
 const MAX_SCHEDULED = 64
 const timers = new Map<string, number>()
@@ -27,6 +29,11 @@ export async function requestLocalNotificationPermission(): Promise<Notification
     const result = await LocalNotifications.requestPermissions()
     return result.display === 'granted' ? 'granted' : result.display === 'denied' ? 'denied' : 'default'
   }
+  if (isTauri()) {
+    if (await isPermissionGranted()) return 'granted'
+    const permission = await requestPermission()
+    return permission === 'granted' ? 'granted' : permission === 'denied' ? 'denied' : 'default'
+  }
   if (!('Notification' in window)) return 'unsupported'
   return Notification.requestPermission()
 }
@@ -42,6 +49,11 @@ export async function showSystemNotification(title: string, body: string, todoId
     return '已发送手机系统通知'
   }
   const bridge = desktopBridge()
+  if (isTauri()) {
+    if (!(await isPermissionGranted())) return '请先允许 Windows 通知'
+    await invoke('desktop_notify', { title, body, todoId: todoId ?? null })
+    return '已发送 Windows 系统通知'
+  }
   if (bridge) {
     bridge.notify({ title, body, todoId })
     return '已发送 Windows 系统通知'
@@ -69,8 +81,9 @@ export async function startLocalReminderScheduler(): Promise<() => void> {
   let stopped = false
   const refresh = async () => {
     const bridge = desktopBridge()
-    const browserReady = 'Notification' in window && Notification.permission === 'granted'
-    if (stopped || (!bridge && !browserReady)) return
+    const tauriReady = isTauri() && await isPermissionGranted()
+    const browserReady = !isTauri() && 'Notification' in window && Notification.permission === 'granted'
+    if (stopped || (!bridge && !browserReady && !tauriReady)) return
     for (const timer of timers.values()) window.clearTimeout(timer)
     timers.clear()
     const config = await loadReminderConfig()

@@ -1,0 +1,27 @@
+[package]
+name = "supercourse-tauri"
+version = "2.0.1"
+description = "课序 Windows 轻量桌面端"
+authors = ["SuperCourse"]
+edition = "2021"
+
+[lib]
+name = "supercourse_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-window-state = "2"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tokio = { version = "1", features = ["time"] }
+
+[target.'cfg(windows)'.dependencies]
+notify-rust = "4.18"

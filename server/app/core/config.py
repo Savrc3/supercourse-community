@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     media_max_bytes: int = 6 * 1024 * 1024
     android_update_url: str | None = None
     desktop_update_url: str | None = None
+    desktop_version: str | None = None
     pairing_code_ttl: int = 300
     # 只有确定前面挂了可信反向代理时才打开：打开后限流按 X-Forwarded-For 第一跳
     # 记账，否则客户端可以伪造该头绕过限流。

@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { defaultRemoteApiBase, getConnectionProfile, isLocalMode } from './connection'
+import { isTauriDesktop } from './desktop'
+import { platformFetch } from './platform-fetch'
 
 const desktopApiBase = typeof window !== 'undefined'
   ? (window as Window & { desktop?: { apiBase?: string } }).desktop?.apiBase
@@ -11,7 +13,7 @@ export function getApiBase(): string {
   if (profile?.mode === 'remote' && profile.serverUrl) return profile.serverUrl
   if (isLocalMode()) return ''
   if (Capacitor.isNativePlatform()) return defaultRemoteApiBase()
-  return desktopApiBase || '/api'
+  return desktopApiBase || (isTauriDesktop() ? '' : '/api')
 }
 
 export const API_BASE = getApiBase()
@@ -29,5 +31,5 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
     }))
   }
-  return fetch(apiUrl(path), init)
+  return platformFetch(apiUrl(path), init)
 }

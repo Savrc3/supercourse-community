@@ -3,6 +3,8 @@ import { createApp } from 'vue'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
+import { isTauri } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
 import App from './App.vue'
 import { getConnectionProfile } from './core/connection'
@@ -14,6 +16,14 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.mount('#app')
+
+if (import.meta.env.MODE === 'tauri') document.title = '课序轻量版'
+
+if (isTauri()) {
+  void listen<string>('desktop-navigate', ({ payload }) => {
+    void router.push(payload)
+  })
+}
 
 if (!getConnectionProfile() && !sync.token) {
   void router.replace('/setup')

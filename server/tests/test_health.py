@@ -26,6 +26,15 @@ def test_version_lists_all_platforms(client: TestClient) -> None:
     assert body["desktop"] == body["api"]
 
 
+def test_desktop_version_can_advance_without_android(client: TestClient) -> None:
+    from app.core.config import get_settings
+
+    get_settings().desktop_version = "2.0.1"
+    body = client.get("/api/version").json()
+    assert body["desktop"] == "2.0.1"
+    assert body["android"] == body["api"]
+
+
 def test_health_hides_storage_details_when_public_details_are_disabled(client: TestClient) -> None:
     from app.core.config import get_settings
 

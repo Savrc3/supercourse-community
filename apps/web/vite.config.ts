@@ -4,11 +4,11 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
     tailwindcss(),
-    VitePWA({
+    ...(mode === 'tauri' ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
@@ -51,7 +51,7 @@ export default defineConfig({
           },
         ],
       },
-    }),
+    })]),
   ],
   server: {
     proxy: {
@@ -61,4 +61,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

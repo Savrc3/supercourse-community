@@ -4,6 +4,7 @@ import {
   blockRowSpan,
   bigPeriodLines,
   applyDayOverrides,
+  assignOverlapLanes,
   canonicalTermStartDate,
   computeTodayTimeline,
   currentWeek,
@@ -159,6 +160,15 @@ describe('mergeConsecutive', () => {
     expect(merged.filter((item) => item.courseId === 'cA')).toHaveLength(1)
     expect(merged.find((item) => item.courseId === 'cA')).toMatchObject({ startLesson: 3, endLesson: 5 })
   })
+
+  it('相邻但教室不同的课程段不合并', () => {
+    const merged = mergeConsecutive([
+      { ...slots[0]!, id: 'room-a', start_lesson: 1, end_lesson: 1, room: 'A101' },
+      { ...slots[1]!, id: 'room-b', start_lesson: 2, end_lesson: 2, room: 'B202' },
+    ], 1)
+    expect(merged).toHaveLength(2)
+    expect(merged.map(({ room }) => room)).toEqual(['A101', 'B202'])
+  })
 })
 
 describe('applyDayOverrides', () => {
@@ -268,6 +278,40 @@ describe('deriveBigPeriodRows / blockRowSpan', () => {
     const rows = deriveBigPeriodRows(periods)
     const block = { slotId: 's', courseId: 'c', weekday: 1, startLesson: 1, endLesson: 4, room: null, weeks: { ranges: [[1, 16]], only: [], except: [], parity: 'all' as const } }
     expect(blockRowSpan(block, rows)).toEqual({ from: 0, to: 1 })
+  })
+})
+
+describe('assignOverlapLanes', () => {
+  it('给同时段课程分配并列轨道，连续但不重叠的课程复用轨道', () => {
+    const lanes = assignOverlapLanes([
+      { id: 'long', startLesson: 1, endLesson: 4 },
+      { id: 'short', startLesson: 2, endLesson: 2 },
+      { id: 'next', startLesson: 5, endLesson: 6 },
+    ])
+
+    expect(lanes).toEqual([
+      { block: { id: 'long', startLesson: 1, endLesson: 4 }, group: 0, lane: 0, laneCount: 2 },
+      { block: { id: 'short', startLesson: 2, endLesson: 2 }, group: 0, lane: 1, laneCount: 2 },
+      { block: { id: 'next', startLesson: 5, endLesson: 6 }, group: 1, lane: 0, laneCount: 1 },
+    ])
+  })
+
+  it('空列表不创建轨道', () => {
+    expect(assignOverlapLanes([])).toEqual([])
+  })
+
+  it('可按实际视觉行而非小节号计算并列轨道', () => {
+    const lanes = assignOverlapLanes(
+      [
+        { id: 'first', startLesson: 1, endLesson: 1 },
+        { id: 'second', startLesson: 2, endLesson: 2 },
+      ],
+      () => ({ start: 0, end: 0 }),
+    )
+    expect(lanes.map(({ group, lane, laneCount }) => ({ group, lane, laneCount }))).toEqual([
+      { group: 0, lane: 0, laneCount: 2 },
+      { group: 0, lane: 1, laneCount: 2 },
+    ])
   })
 })
 

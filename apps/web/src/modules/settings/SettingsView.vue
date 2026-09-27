@@ -7,18 +7,10 @@ import { createLocalBackup, restoreLocalBackup } from '../../core/backup'
 import { canonicalCourseIds } from '../../core/courses'
 import { isLocalMode } from '../../core/connection'
 import { useAppStore } from '../../stores/app'
+import { COURSE_PALETTE } from '../timetable/coursePalette'
 import ReminderSettingsPanel from './ReminderSettingsPanel.vue'
 
-const PALETTE = [
-  '#D9542B',
-  '#2E7FB8',
-  '#3B8B47',
-  '#A63B91',
-  '#C98A12',
-  '#5D529B',
-  '#12817F',
-  '#9E3A4A',
-]
+const PALETTE = COURSE_PALETTE
 const appStore = useAppStore()
 const DAY_NAMES = ['一', '二', '三', '四', '五', '六', '日']
 
@@ -901,7 +893,7 @@ async function importBackup(event: Event) {
 .primary-btn {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 .danger-btn,

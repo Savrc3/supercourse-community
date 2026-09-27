@@ -95,7 +95,7 @@ function platformName(): string {
 .login-form { display: grid; gap: 14px; margin-top: 22px; }
 .login-form label { display: grid; gap: 6px; color: var(--text-secondary); font-size: 13px; }
 .login-form input { min-height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
-.primary-btn { min-height: 42px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.primary-btn { min-height: 42px; border: 0; border-radius: 3px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
 .primary-btn:disabled { cursor: not-allowed; opacity: .55; }
 .switch-btn { margin-top: 16px; border: 0; background: transparent; color: var(--accent); cursor: pointer; font: inherit; }
 .login-error { margin-top: 12px; color: var(--danger); font-size: 13px; }

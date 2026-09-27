@@ -41,12 +41,12 @@ function finish() {
 </template>
 
 <style scoped>
-.onboarding { max-width: 520px; margin: 7vh auto 0; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.onboarding h1 { margin: 0 0 10px; font-size: 25px; }
+.onboarding { max-width: 520px; margin: 7vh auto 0; padding: 24px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); }
+.onboarding h1 { margin: 0 0 10px; font: 700 28px var(--font-editorial); }
 .onboarding p, .onboarding li { color: var(--text-secondary); font-size: 14px; line-height: 1.8; }
 .onboarding ol { padding-left: 22px; }
 .onboarding-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 .ghost-btn, .primary-btn { min-height: 40px; padding: 0 15px; border-radius: 8px; font: inherit; cursor: pointer; }
 .ghost-btn { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
-.primary-btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+.primary-btn { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); }
 </style>

@@ -115,6 +115,82 @@ describe('TimetableView 周视图布局', () => {
     wrapper.unmount()
   })
 
+  it('日视图中的跨大节连堂只渲染为一张连续课程卡片', async () => {
+    mocks.terms.push({
+      id: 'term-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      name: '2026-2027-1', label: null, start_date: '2026-08-31',
+      weeks_total: 20, is_current: 1, archived_at: null,
+    })
+    mocks.courses.push({
+      id: 'course-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      term_id: 'term-1', name: '连续课程', short_name: null, teacher: null,
+      color: 0, sort_order: 0,
+    })
+    mocks.slots.push({
+      id: 'slot-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      course_id: 'course-1', weekday: 1, start_lesson: 1, end_lesson: 4,
+      room: 'A101', weeks: '{"ranges":[[1,20]],"only":[],"except":[],"parity":"all"}',
+    })
+    mocks.periods.push(...[1, 2, 3, 4].map((lesson) => ({
+      id: `period-${lesson}`, _rev: 1, _updated_at: null, _deleted_at: null,
+      term_id: 'term-1', lesson_no: lesson, start_time: `${8 + lesson}:00`,
+      end_time: `${8 + lesson}:50`, big_period: lesson <= 2 ? 1 : 2,
+    })))
+
+    const wrapper = mount(TimetableView)
+    await flushPromises()
+    await wrapper.find('.icon-btn').trigger('click')
+    await nextTick()
+
+    expect(wrapper.findAll('.day-period-meta')).toHaveLength(2)
+    expect(wrapper.findAll('.day-course')).toHaveLength(1)
+    expect(wrapper.find('.day-course-group').attributes('style')).toContain('grid-row: 1 / 3')
+    expect(wrapper.find('.day-course').text()).toContain('连续课程')
+    expect(wrapper.text()).not.toContain('空闲')
+    wrapper.unmount()
+  })
+
+  it('周视图将冲突课程聚合，并可转到单日视图查看和编辑', async () => {
+    mocks.terms.push({
+      id: 'term-1', _rev: 1, _updated_at: null, _deleted_at: null,
+      name: '2026-2027-1', label: null, start_date: '2026-08-31',
+      weeks_total: 20, is_current: 1, archived_at: null,
+    })
+    for (const [id, name, color, room] of [
+      ['course-1', '课程甲', 0, 'A101'],
+      ['course-2', '课程乙', 1, 'B202'],
+    ]) {
+      mocks.courses.push({
+        id, _rev: 1, _updated_at: null, _deleted_at: null,
+        term_id: 'term-1', name, short_name: null, teacher: null, color, sort_order: color,
+      })
+      mocks.slots.push({
+        id: `slot-${id}`, _rev: 1, _updated_at: null, _deleted_at: null,
+        course_id: id, weekday: 1, start_lesson: 1, end_lesson: 2, room,
+        weeks: '{"ranges":[[1,20]],"only":[],"except":[],"parity":"all"}',
+      })
+    }
+    mocks.periods.push(...[1, 2].map((lesson) => ({
+      id: `period-${lesson}`, _rev: 1, _updated_at: null, _deleted_at: null,
+      term_id: 'term-1', lesson_no: lesson, start_time: `${8 + lesson}:00`,
+      end_time: `${8 + lesson}:50`, big_period: 1,
+    })))
+
+    const wrapper = mount(TimetableView)
+    await flushPromises()
+
+    expect(wrapper.findAll('.week-course-group.has-collision')).toHaveLength(1)
+    expect(wrapper.findAll('.week-course')).toHaveLength(2)
+    await wrapper.find('.week-collision').trigger('click')
+    await nextTick()
+    await nextTick()
+
+    expect(mocks.appStore.mobileView).toBe('day')
+    expect(wrapper.findAll('.day-course')).toHaveLength(2)
+    expect(wrapper.find('.day-course-group').attributes('style')).toContain('grid-template-columns: repeat(2')
+    wrapper.unmount()
+  })
+
   it('日视图左右滑动切换相邻日期，周视图左右滑动切换周次', async () => {
     mocks.terms.push({
       id: 'term-1',

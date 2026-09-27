@@ -435,7 +435,7 @@ function diffKey(item: DiffItem) {
   margin-top: 12px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .primary-btn:not(:disabled):hover,
 .ghost-btn:not(:disabled):hover {

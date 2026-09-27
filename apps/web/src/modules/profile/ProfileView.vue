@@ -251,7 +251,7 @@ onMounted(() => {
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 .update-actions { margin-top: 12px; }

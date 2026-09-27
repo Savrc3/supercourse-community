@@ -16,6 +16,7 @@ import { useAppStore } from '../../stores/app'
 import {
   blockRowSpan,
   applyDayOverrides,
+  assignOverlapLanes,
   canonicalTermStartDate,
   currentWeek,
   deriveBigPeriodRows,
@@ -28,6 +29,7 @@ import {
   type BigPeriodRow,
 } from './derive'
 import { detectHorizontalSwipe, type SwipePoint } from './swipe'
+import { COURSE_PALETTE } from './coursePalette'
 
 const appStore = useAppStore()
 
@@ -57,16 +59,7 @@ const editorForm = reactive({
   weeksText: '1-20',
 })
 
-const PALETTE = [
-  '#D9542B',
-  '#2E7FB8',
-  '#3B8B47',
-  '#A63B91',
-  '#C98A12',
-  '#5D529B',
-  '#12817F',
-  '#9E3A4A',
-]
+const PALETTE = COURSE_PALETTE
 
 let unsubscribeSync: (() => void) | null = null
 let reloadTimer: ReturnType<typeof setTimeout> | null = null
@@ -229,6 +222,13 @@ function toggleView() {
   appStore.mobileView = appStore.mobileView === 'day' ? 'week' : 'day'
 }
 
+function openWeekday(weekday: number) {
+  const date = header.value.find((item) => item.weekday === weekday)?.date
+  if (!date) return
+  selectDate(date)
+  appStore.mobileView = 'day'
+}
+
 function onSwipeStart(event: PointerEvent) {
   if (editorOpen.value) return
   swipeStart = { x: event.clientX, y: event.clientY }
@@ -340,33 +340,79 @@ const weekCourses = computed(() => {
   })
 })
 
-/** 单日视图：固定展示一天的各大节，并明确标出每节是有课还是空闲。 */
-const dayRows = computed(() => {
+const weekCourseGroups = computed(() => {
+  return Array.from({ length: 7 }, (_, dayIndex) => {
+    const weekday = dayIndex + 1
+    const layouts = assignOverlapLanes(
+      weekCourses.value.filter((block) => block.weekday === weekday),
+      (block) => ({ start: block.rowFrom, end: block.rowTo }),
+    )
+    const groups = new Map<number, typeof layouts>()
+    layouts.forEach((layout) => {
+      const group = groups.get(layout.group) ?? []
+      group.push(layout)
+      groups.set(layout.group, group)
+    })
+    return [...groups].map(([group, courses]) => ({
+      weekday,
+      group,
+      courses,
+      rowFrom: Math.min(...courses.map(({ block }) => block.rowFrom)),
+      rowTo: Math.max(...courses.map(({ block }) => block.rowTo)),
+    }))
+  }).flat()
+})
+
+/** 单日视图的大节时间轴；课程由单独图层绘制，以支持跨行连堂卡片。 */
+const dayRows = computed(() => bigRows.value)
+
+const dayCourses = computed(() => {
   const weekday = header.value.find((item) => item.date === selectedDate.value)?.weekday ?? weekdayOfISO(selectedDate.value)
-  return bigRows.value.map((row) => ({
-    ...row,
-    courses: displayBlocks.value
-      .filter((block) => block.weekday === weekday && block.startLesson <= row.lastLesson && block.endLesson >= row.firstLesson)
-      .map((block) => {
-        const course = courseMap.value.get(block.courseId)
-        return {
-          ...block,
-          displayName: course?.name ?? courseName(block.courseId),
-          color: colorOf(block.courseId),
-        }
-      }),
+  const rows = bigRows.value
+  const blocksForDay = displayBlocks.value
+    .filter((block) => block.weekday === weekday)
+    .map((block) => {
+      const span = blockRowSpan(block, rows)
+      const course = courseMap.value.get(block.courseId)
+      return {
+        ...block,
+        rowFrom: span.from,
+        rowTo: span.to,
+        displayName: course?.name ?? courseName(block.courseId),
+        color: colorOf(block.courseId),
+      }
+    })
+  return assignOverlapLanes(
+    blocksForDay,
+    (block) => ({ start: block.rowFrom, end: block.rowTo }),
+  )
+})
+
+const dayCourseGroups = computed(() => {
+  const groups = new Map<number, typeof dayCourses.value>()
+  dayCourses.value.forEach((layout) => {
+    const group = groups.get(layout.group) ?? []
+    group.push(layout)
+    groups.set(layout.group, group)
+  })
+  return [...groups.values()].map((courses) => ({
+    courses,
+    rowFrom: Math.min(...courses.map(({ block }) => block.rowFrom)),
+    rowTo: Math.max(...courses.map(({ block }) => block.rowTo)),
   }))
+})
+
+const occupiedDayRows = computed(() => {
+  const occupied = new Set<number>()
+  dayCourses.value.forEach(({ block }) => {
+    for (let row = block.rowFrom; row <= block.rowTo; row += 1) occupied.add(row)
+  })
+  return occupied
 })
 
 function colorOf(courseId: string): string {
   const course = courseMap.value.get(courseId)
   return PALETTE[(course?.color ?? 0) % PALETTE.length]
-}
-
-function colorMix(hex: string): string {
-  // 淡染模式：8% 颜色混入 surface。
-  const [r, g, b] = hex.match(/\w\w/g)!.map((x) => parseInt(x, 16))
-  return `rgba(${r}, ${g}, ${b}, 0.09)`
 }
 
 function courseName(courseId: string): string {
@@ -672,43 +718,67 @@ async function deleteEditorSlot() {
             </nav>
             <div
               class="day-grid swipe-surface"
+              :style="{
+                gridTemplateColumns: 'minmax(82px, 0.28fr) minmax(0, 1fr)',
+                gridTemplateRows: `repeat(${dayRows.length}, minmax(0, 1fr))`,
+              }"
               @pointerdown="onSwipeStart"
               @pointerup="onSwipeEnd"
               @pointercancel="onSwipeCancel"
               @click.capture="onSwipeClickCapture"
             >
-              <article
-                v-for="row in dayRows"
+              <template
+                v-for="(row, rowIndex) in dayRows"
                 :key="row.big"
-                class="day-period"
               >
-                <div class="day-period-meta">
+                <div
+                  class="day-period-meta"
+                  :style="{ gridRow: rowIndex + 1 }"
+                >
                   <strong>{{ row.big }}大节</strong>
                   <span>第{{ row.firstLesson }}-{{ row.lastLesson }}节</span>
                   <small>{{ row.start }}-{{ row.end }}</small>
                 </div>
-                <div class="day-period-content">
-                  <article
-                    v-for="course in row.courses"
-                    :key="`${row.big}-${course.slotId}`"
-                    class="day-course"
-                    :style="{ borderLeftColor: course.color, background: colorMix(course.color) }"
-                    role="button"
-                    tabindex="0"
-                    :aria-label="`编辑${course.displayName}`"
-                    @click="openEditEditor(course.slotId)"
-                    @keydown.enter="openEditEditor(course.slotId)"
-                  >
-                    <strong>{{ course.displayName }}</strong>
-                    <span>{{ course.room || '未设置教室' }}</span>
-                    <small>第{{ course.startLesson }}-{{ course.endLesson }}节</small>
-                  </article>
+                <div
+                  class="day-period-content"
+                  :style="{ gridRow: rowIndex + 1 }"
+                >
                   <span
-                    v-if="row.courses.length === 0"
+                    v-if="!occupiedDayRows.has(rowIndex)"
                     class="day-free"
                   >空闲</span>
                 </div>
-              </article>
+              </template>
+              <div
+                v-for="group in dayCourseGroups"
+                :key="`day-group-${group.courses[0]?.group}`"
+                class="day-course-group"
+                :style="{
+                  gridRow: `${group.rowFrom + 1} / ${group.rowTo + 2}`,
+                  gridTemplateColumns: `repeat(${group.courses[0]?.laneCount ?? 1}, minmax(0, 1fr))`,
+                  gridTemplateRows: `repeat(${group.rowTo - group.rowFrom + 1}, minmax(0, 1fr))`,
+                }"
+              >
+                <article
+                  v-for="layout in group.courses"
+                  :key="layout.block.slotId"
+                  class="day-course"
+                  :style="{
+                    gridColumn: layout.lane + 1,
+                    gridRow: `${layout.block.rowFrom - group.rowFrom + 1} / ${layout.block.rowTo - group.rowFrom + 2}`,
+                    '--course-color': layout.block.color,
+                  }"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`编辑${layout.block.displayName}`"
+                  @click="openEditEditor(layout.block.slotId)"
+                  @keydown.enter="openEditEditor(layout.block.slotId)"
+                >
+                  <strong>{{ layout.block.displayName }}</strong>
+                  <span>{{ layout.block.room || '未设置教室' }}</span>
+                  <small>第{{ layout.block.startLesson }}-{{ layout.block.endLesson }}节</small>
+                </article>
+              </div>
               <div
                 v-if="dayRows.length === 0"
                 class="empty-state"
@@ -763,26 +833,45 @@ async function deleteEditorSlot() {
                     :style="{ gridColumn: dayIndex + 2, gridRow: rowIndex + 1 }"
                   />
                 </template>
-                <!-- 课程块：跨行跨列定位 -->
-                <article
-                  v-for="b in weekCourses"
-                  :key="'wc-' + b.slotId"
-                  class="week-course"
+                <!-- 同日同视觉行的课程成组排布；窄屏可一键切换到当天选择。 -->
+                <div
+                  v-for="group in weekCourseGroups"
+                  :key="`week-group-${group.weekday}-${group.group}`"
+                  class="week-course-group"
+                  :class="{ 'has-collision': group.courses.length > 1 }"
                   :style="{
-                    gridColumn: (b.weekday + 1) + ' / span 1',
-                    gridRow: (b.rowFrom + 1) + ' / ' + (b.rowTo + 2),
-                    borderLeftColor: b.color,
-                    background: colorMix(b.color),
+                    gridColumn: group.weekday + 1,
+                    gridRow: `${group.rowFrom + 1} / ${group.rowTo + 2}`,
+                    gridTemplateColumns: `repeat(${group.courses[0]?.laneCount ?? 1}, minmax(0, 1fr))`,
+                    gridTemplateRows: `repeat(${group.rowTo - group.rowFrom + 1}, minmax(0, 1fr))`,
                   }"
-                  role="button"
-                  tabindex="0"
-                  :aria-label="`编辑${b.displayName}`"
-                  @click="openEditEditor(b.slotId)"
-                  @keydown.enter="openEditEditor(b.slotId)"
                 >
-                  <span class="wc-name">{{ b.displayName }}</span>
-                  <span class="wc-room">{{ b.room || '' }}</span>
-                </article>
+                  <article
+                    v-for="layout in group.courses"
+                    :key="`wc-${layout.block.slotId}`"
+                    class="week-course"
+                    :style="{
+                      gridColumn: layout.lane + 1,
+                      gridRow: `${layout.block.rowFrom - group.rowFrom + 1} / ${layout.block.rowTo - group.rowFrom + 2}`,
+                      '--course-color': layout.block.color,
+                    }"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="`编辑${layout.block.displayName}`"
+                    @click="openEditEditor(layout.block.slotId)"
+                    @keydown.enter="openEditEditor(layout.block.slotId)"
+                  >
+                    <span class="wc-name">{{ layout.block.displayName }}</span>
+                    <span class="wc-room">{{ layout.block.room || '' }}</span>
+                  </article>
+                  <button
+                    v-if="group.courses.length > 1"
+                    class="week-collision"
+                    type="button"
+                    :aria-label="`${group.courses.length} 门课程重叠，切换到周${['一', '二', '三', '四', '五', '六', '日'][group.weekday - 1]}单日视图查看`"
+                    @click="openWeekday(group.weekday)"
+                  >{{ group.courses.length }}门<br><small>查看</small></button>
+                </div>
               </div>
             </div>
           </template>
@@ -937,7 +1026,7 @@ async function deleteEditorSlot() {
   flex: 0 0 auto;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--accent);
   font-weight: 600;
@@ -954,8 +1043,8 @@ async function deleteEditorSlot() {
   min-height: 32px;
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: 0;
+  background: transparent;
   color: var(--accent);
   font-size: 12px;
   white-space: nowrap;
@@ -1076,12 +1165,16 @@ async function deleteEditorSlot() {
   align-items: center;
   gap: 2px;
   padding: 6px 0;
-  border-radius: 8px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
   color: var(--text-secondary);
   font-size: 12px;
 }
 .week-head-cell.today b {
   color: var(--accent);
+}
+.week-head-cell.today {
+  border-bottom-color: var(--accent);
 }
 .week-body {
   position: relative;
@@ -1090,8 +1183,17 @@ async function deleteEditorSlot() {
   grid-template-columns: 72px repeat(7, minmax(0, 1fr));
   min-height: 400px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 3px;
   overflow: hidden;
+}
+.week-course-group {
+  min-width: 0;
+  display: grid;
+  z-index: 2;
+  pointer-events: none;
+}
+.week-collision {
+  display: none;
 }
 .week-axis {
   position: relative;
@@ -1130,9 +1232,11 @@ async function deleteEditorSlot() {
   height: calc(100% - 12px);
   align-self: start;
   margin: 6px;
-  border-radius: var(--radius);
+  border-radius: 2px;
   padding: 8px;
-  border: 1px solid var(--line);
+  border: 0;
+  border-left: 4px solid var(--course-color);
+  background: color-mix(in srgb, var(--course-color) var(--course-tint-strength), var(--surface));
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1199,7 +1303,8 @@ async function deleteEditorSlot() {
   .week-course {
     margin: 2px;
     padding: 4px 2px;
-    border-radius: 6px;
+    border-radius: 2px;
+    border-left-width: 3px;
     gap: 2px;
     font-size: 10px;
   }
@@ -1212,73 +1317,57 @@ async function deleteEditorSlot() {
     line-height: 1.15;
     word-break: break-all;
   }
+  .week-course-group.has-collision {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .week-course-group.has-collision .week-course {
+    display: none;
+  }
+  .week-course-group.has-collision .week-collision {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    min-width: 0;
+    min-height: 44px;
+    margin: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 0;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: 700 10px/1.2 var(--font-sans);
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .week-collision small {
+    font-size: 9px;
+    font-weight: 500;
+  }
 }
 
 .day-grid {
   margin-top: 18px;
+  position: relative;
   display: grid;
-  gap: 10px;
+  border-top: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--surface);
 }
 
 @media (max-width: 767px) {
   .is-day-view .day-grid {
     /* 为固定底部导航和手势区留出空间，让标准五大节在一屏内完整可见。 */
-    height: max(0px, calc(100svh - 271px - var(--mobile-nav-inset)));
-    grid-auto-rows: minmax(0, 1fr);
-    gap: 6px;
-    overflow: hidden;
-  }
-  .is-day-view .day-period {
-    min-height: 0;
-  }
-  .is-day-view .day-period-content {
-    min-height: 0;
-    overflow: hidden;
-    padding: 6px;
-  }
-  .is-day-view .day-course {
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-    padding: 6px 8px;
-    gap: 2px;
-  }
-  .is-day-view .day-course strong,
-  .is-day-view .day-course span,
-  .is-day-view .day-course small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .is-day-view .day-period-meta {
-    min-width: 0;
-    padding: 8px 6px;
-    gap: 2px;
-  }
-  .is-day-view .day-period-meta strong,
-  .is-day-view .day-period-meta span,
-  .is-day-view .day-period-meta small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .is-day-view .day-period-meta span,
-  .is-day-view .day-period-meta small,
-  .is-day-view .day-course span,
-  .is-day-view .day-course small {
-    font-size: 11px;
+    height: max(360px, calc(100svh - 280px - var(--mobile-nav-inset)));
+    overflow: auto;
   }
 }
 
 @media (max-width: 380px) {
-  .is-day-view .day-period {
-    grid-template-columns: 96px minmax(0, 1fr);
-  }
   .is-day-view .day-period-meta {
     padding-inline: 4px;
-  }
-  .is-day-view .day-course {
-    padding-inline: 6px;
   }
 }
 
@@ -1290,54 +1379,62 @@ async function deleteEditorSlot() {
   }
 }
 
-.day-period {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  min-height: 92px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--surface);
-}
 .day-period-meta {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  padding: 12px;
-  border-right: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
-}
-.day-period-meta strong { color: var(--text); }
-.day-period-meta span,
-.day-period-meta small { color: var(--text-secondary); font-size: 12px; }
-.day-period-content {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  padding: 8px;
-}
-.day-course {
-  min-width: 150px;
-  flex: 1;
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-left: 3px solid;
-  border-radius: 8px;
-  color: var(--text);
-  cursor: pointer;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+  z-index: 1;
 }
+.day-period-meta strong { color: var(--text); }
+.day-period-meta span,
+.day-period-meta small { color: var(--text-secondary); font-size: 12px; }
+.day-period-content {
+  grid-column: 2;
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.day-course-group {
+  grid-column: 2;
+  display: grid;
+  min-width: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.day-course {
+  min-width: 0;
+  margin: 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 0;
+  border-left: 4px solid var(--course-color);
+  border-radius: 3px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--course-color) var(--course-tint-strength), var(--surface));
+  cursor: pointer;
+  pointer-events: auto;
+  overflow: auto;
+}
+.day-course strong { line-height: 1.35; overflow-wrap: anywhere; }
 .day-course span,
 .day-course small { color: var(--text-secondary); font-size: 12px; }
 .day-free {
   align-self: center;
-  padding-left: 4px;
+  padding: 10px 14px;
   color: var(--text-secondary);
   font-size: 13px;
+  font-family: var(--font-editorial);
 }
 
 .empty-state {
@@ -1353,7 +1450,7 @@ async function deleteEditorSlot() {
   text-align: center;
   color: var(--text-secondary);
   font-size: 14px;
-  border-radius: var(--radius);
+  border-radius: 3px;
   background: var(--surface);
   border: 1px solid var(--line);
 }
@@ -1373,7 +1470,7 @@ async function deleteEditorSlot() {
   overflow: auto;
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -1389,7 +1486,7 @@ async function deleteEditorSlot() {
   width: 36px;
   height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 22px;
@@ -1412,7 +1509,7 @@ async function deleteEditorSlot() {
   box-sizing: border-box;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -1443,7 +1540,7 @@ async function deleteEditorSlot() {
   min-height: 40px;
   margin: 0;
   padding: 0 14px;
-  border-radius: 8px;
+  border-radius: 3px;
   font-weight: 600;
 }
 .editor-spacer {
@@ -1461,11 +1558,21 @@ async function deleteEditorSlot() {
   .editor-row label:first-child {
     grid-column: 1 / -1;
   }
-  .day-period {
-    grid-template-columns: 86px minmax(0, 1fr);
+  .day-period-meta {
+    padding-inline: 6px;
+    gap: 3px;
+  }
+  .day-period-meta strong {
+    font-size: 12px;
   }
   .day-course {
-    min-width: 124px;
+    margin: 3px;
+    padding: 6px 7px;
+    gap: 3px;
+  }
+  .day-course span,
+  .day-course small {
+    font-size: 10px;
   }
 }
 

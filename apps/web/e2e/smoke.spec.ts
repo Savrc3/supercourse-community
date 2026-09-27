@@ -186,7 +186,9 @@ test('移动端单日视图完整显示五个大节，不被底部导航遮挡',
 
   await page.reload()
   await expect(page.locator('.day-grid')).toBeVisible()
-  await expect(page.locator('.day-period')).toHaveCount(5)
+  await expect(page.locator('.day-period-meta')).toHaveCount(5)
+  await expect(page.locator('.day-course')).toHaveCount(1)
+  await expect(page.locator('.day-course-group')).toHaveCSS('grid-row', '1 / 6')
 
   // 查看其它日期时不再插入额外的“回到今天”布局行，但真实今天仍有明确标记。
   await page.locator('.day-tab').nth(1).click()
@@ -216,7 +218,7 @@ test('移动端单日视图完整显示五个大节，不被底部导航遮挡',
   await page.waitForTimeout(350)
 
   const metrics = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll<HTMLElement>('.day-period')]
+    const rows = [...document.querySelectorAll<HTMLElement>('.day-period-meta')]
     const nav = document.querySelector<HTMLElement>('.mobile-nav')
     const last = rows.at(-1)
     if (!last || !nav) throw new Error('单日视图或底部导航未渲染')
@@ -229,6 +231,71 @@ test('移动端单日视图完整显示五个大节，不被底部导航遮挡',
 
   // 回归：滑动结束后布局视口不能被横向动画撑大，底部导航文字必须留在可见区域内。
   await expectNavStableAfterSwipe(page)
+})
+
+test('周视图课程重叠时不互相遮挡，手机聚合入口可打开当天', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: /本地使用/ }).click()
+  await expect(page.getByRole('heading', { name: '课表' })).toBeVisible()
+
+  await page.evaluate(async () => {
+    const now = new Date()
+    const weekday = now.getDay() || 7
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - weekday + 1)
+    const startDate = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('supercourse')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = database.transaction(['term', 'course', 'course_slot', 'lesson_period'], 'readwrite')
+    transaction.objectStore('term').put({
+      id: 'e2e-overlap-term', _rev: 1, _updated_at: null, _deleted_at: null,
+      name: 'E2E 重叠课程学期', label: null, start_date: startDate, weeks_total: 20,
+      is_current: 1, archived_at: null,
+    })
+    for (const [index, name, room] of [[1, '重叠课程甲', 'A101'], [2, '重叠课程乙', 'B202']] as const) {
+      transaction.objectStore('course').put({
+        id: `e2e-overlap-course-${index}`, _rev: 1, _updated_at: null, _deleted_at: null,
+        term_id: 'e2e-overlap-term', name, short_name: null, teacher: null,
+        code: null, color: index - 1, credit: null, exam_at: null, exam_room: null,
+        exam_note: null, textbook: null, grade_breakdown: null, note: null, sort_order: index,
+      })
+      transaction.objectStore('course_slot').put({
+        id: `e2e-overlap-slot-${index}`, _rev: 1, _updated_at: null, _deleted_at: null,
+        course_id: `e2e-overlap-course-${index}`, weekday: 1, start_lesson: 1, end_lesson: 2,
+        room, weeks: '{"ranges":[[1,20]],"only":[],"except":[],"parity":"all"}',
+      })
+    }
+    for (let lesson = 1; lesson <= 2; lesson += 1) {
+      transaction.objectStore('lesson_period').put({
+        id: `e2e-overlap-period-${lesson}`, _rev: 1, _updated_at: null, _deleted_at: null,
+        term_id: 'e2e-overlap-term', lesson_no: lesson, start_time: `${7 + lesson}:00`,
+        end_time: `${7 + lesson}:50`, big_period: 1,
+      })
+    }
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
+  })
+
+  await page.reload()
+  await page.getByRole('button', { name: '切换周视图' }).click()
+  await expect(page.locator('.week-course-group.has-collision')).toHaveCount(1)
+  await expect(page.locator('.week-course')).toHaveCount(2)
+
+  if (testInfo.project.name === 'mobile') {
+    const dayPicker = page.getByRole('button', { name: /2 门课程重叠/ })
+    await expect(dayPicker).toBeVisible()
+    await dayPicker.click()
+    await expect(page.locator('.day-course')).toHaveCount(2)
+  } else {
+    const cards = page.locator('.week-course-group.has-collision .week-course')
+    await expect(cards.nth(0)).toHaveCSS('grid-column-start', '1')
+    await expect(cards.nth(1)).toHaveCSS('grid-column-start', '2')
+  }
 })
 
 test('待办 Markdown 预览保留标题、列表标记和嵌套层级', async ({ page }) => {

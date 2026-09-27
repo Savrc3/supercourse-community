@@ -278,7 +278,7 @@ async function save() {
 .detail-head, .title-row, .actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .back-btn, .ghost-btn, .primary-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 13px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .back-btn { border: 0; padding-left: 0; color: var(--text-secondary); }
-.primary-btn { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+.primary-btn { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .title-row { margin: 22px 0 16px; align-items: flex-start; }
 h1 { margin: 0; font-size: 24px; }
 .title-row p, .muted, .saved { color: var(--text-secondary); font-size: 13px; }

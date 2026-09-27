@@ -55,12 +55,12 @@ function chooseRemote() {
 .setup-page h1 { margin: 0 0 10px; font-size: 26px; }
 .setup-desc, .setup-card span { color: var(--text-secondary); font-size: 14px; line-height: 1.7; }
 .setup-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
-.setup-card { display: grid; gap: 8px; min-height: 170px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.setup-card { display: grid; gap: 8px; min-height: 170px; padding: 20px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .setup-card:hover { border-color: var(--accent); }
 .remote-card { cursor: default; }
 .remote-card:hover { border-color: var(--line); }
 .remote-card input { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
-.primary-btn { min-height: 40px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.primary-btn { min-height: 40px; border: 0; border-radius: 3px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
 .setup-error { margin-top: 14px; color: var(--danger); font-size: 13px; }
 @media (max-width: 620px) { .setup-options { grid-template-columns: 1fr; } .setup-page { margin-top: 4vh; } }
 </style>

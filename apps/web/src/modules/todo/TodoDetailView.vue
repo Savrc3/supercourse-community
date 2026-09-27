@@ -881,7 +881,7 @@ function currentDue(): string {
 .preset-chip.active { background: var(--accent-soft); }
 .done-toggle { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 8px; width: 100%; margin-top: 20px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); text-align: left; }
 .done-toggle:hover, .done-toggle.checked { border-color: var(--accent); }
-.done-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 50%; color: #fff; }
+.done-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 2px; color: var(--on-accent); }
 .done-toggle.checked .done-check { border-color: var(--accent); background: var(--accent); }
 .done-toggle small { color: var(--text-secondary); font-size: 11px; }
 @media (max-width: 760px) {

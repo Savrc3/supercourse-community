@@ -102,6 +102,20 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.empty-group { margin: 0; padding: 12px 13px; border: 1px dashed var(--line); border-radius: 9px; color: var(--text-secondary); font-size: 12px; }
-.timeline-view { padding-top: 4px; }.reminder-link { color: var(--accent); font-size: 13px; }.filters { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }.filter { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; }.filter select, .filter input { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }.state { margin-top: 22px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text-secondary); text-align: center; }.timeline-group { margin-top: 22px; }.timeline-group h2 { margin: 0 0 9px; font-size: 17px; }.timeline-group h2 small { color: var(--text-secondary); font-size: 12px; font-weight: 400; }.timeline-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }.timeline-row + .timeline-row { margin-top: 7px; }.timeline-row div { display: grid; gap: 3px; min-width: 0; }.timeline-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }.timeline-row small, .timeline-row > span { color: var(--text-secondary); font-size: 12px; }.timeline-row > span { white-space: nowrap; }
+.empty-group { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 12px; }
+.timeline-view { padding-top: 4px; }
+.reminder-link { color: var(--accent); font-size: 13px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.filter { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 13px; }
+.filter select, .filter input { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--text); font: inherit; }
+.state { margin-top: 22px; padding: 28px 0; border-block: 1px solid var(--line); color: var(--text-secondary); text-align: center; }
+.timeline-group { margin-top: 28px; }
+.timeline-group h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 0; padding: 0 0 9px; border-bottom: 1px solid var(--line-strong); font: 700 19px var(--font-editorial); }
+.timeline-group h2 small { color: var(--accent); font: 700 12px var(--font-sans); font-variant-numeric: tabular-nums; }
+.timeline-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 2px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.timeline-row:hover { background: color-mix(in srgb, var(--text) 3%, var(--bg)); }
+.timeline-row div { display: grid; gap: 4px; min-width: 0; }
+.timeline-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.timeline-row small, .timeline-row > span { color: var(--text-secondary); font-size: 12px; }
+.timeline-row > span { white-space: nowrap; font-variant-numeric: tabular-nums; }
 </style>

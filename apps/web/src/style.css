@@ -1,23 +1,26 @@
 @import 'tailwindcss';
 
 :root {
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --surface-raised: #fbfcff;
-  --line: #e4e8f0;
-  --line-strong: #c9d2e2;
-  --text: #182230;
-  --text-secondary: #667085;
-  --accent: #3859d6;
-  --accent-deep: #24378d;
-  --accent-soft: rgba(56, 89, 214, 0.1);
-  --success: #33866f;
-  --warning: #b9781a;
-  --danger: #c84d5e;
-  --shadow: 0 8px 24px rgba(36, 55, 141, 0.08);
+  --bg: #f2eee5;
+  --surface: #fcfaf5;
+  --surface-raised: #eae4d8;
+  --line: #d8d1c5;
+  --line-strong: #aaa091;
+  --text: #23211d;
+  --text-secondary: #625d55;
+  --accent: #9b3d2b;
+  --accent-deep: #6f2d22;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --on-accent: #fcfaf5;
+  --success: #41684a;
+  --warning: #92551f;
+  --danger: #9d3e35;
+  --course-tint-strength: 14%;
+  --shadow: 0 14px 36px rgba(40, 31, 21, 0.12);
   --rh: 52px;
-  --radius: 12px;
+  --radius: 8px;
   --font-sans: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --font-editorial: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif CJK SC', serif;
   --mobile-nav-inset: 0px;
 
   font-family: var(--font-sans);
@@ -31,19 +34,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111522;
-    --surface: #1a2030;
-    --surface-raised: #20283a;
-    --line: #293246;
-    --line-strong: #3a4962;
-    --text: #eef2ff;
-    --text-secondary: #a8b3c8;
-    --accent: #8b9cff;
-    --accent-deep: #b5c0ff;
-    --accent-soft: rgba(139, 156, 255, 0.16);
-    --success: #6bc3a7;
-    --warning: #e0ad5a;
-    --danger: #ff8d9d;
+    --bg: #1c1b18;
+    --surface: #282621;
+    --surface-raised: #333029;
+    --line: #49443b;
+    --line-strong: #6e675d;
+    --text: #f2eee6;
+    --text-secondary: #c4beb2;
+    --accent: #f0a28d;
+    --accent-deep: #f6c2b4;
+    --accent-soft: color-mix(in srgb, var(--accent) 17%, var(--surface));
+    --on-accent: #282621;
+    --success: #91b59b;
+    --warning: #d7aa74;
+    --danger: #e89d91;
+    --course-tint-strength: 27%;
     --shadow: none;
     color-scheme: dark;
   }
@@ -93,14 +98,14 @@ a {
 }
 
 .app-header {
-  height: 56px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 1px 0 var(--line), 0 8px 24px rgba(36, 55, 141, 0.04);
+  background: var(--surface);
+  box-shadow: none;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -111,31 +116,33 @@ a {
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  color: var(--accent-deep);
-  letter-spacing: -0.02em;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  font-size: 17px;
 }
 
 .brand svg {
-  color: var(--accent);
+  color: var(--on-accent);
   width: 30px;
   height: 30px;
   padding: 5px;
-  border-radius: 9px;
-  background: var(--accent-soft);
+  border-radius: 3px;
+  background: var(--accent);
 }
 
 .desktop-nav {
   display: none;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
 }
 
 .desktop-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 12px;
-  border-radius: 10px;
+  min-height: 64px;
+  padding: 7px 6px 5px;
+  border-bottom: 2px solid transparent;
   color: var(--text-secondary);
   font-size: 14px;
   transition:
@@ -146,13 +153,14 @@ a {
 .desktop-link:hover,
 .desktop-link.active {
   color: var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
+  border-bottom-color: var(--accent);
 }
 
 .app-main {
   flex: 1;
   width: 100%;
-  max-width: 1120px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 20px 16px 88px;
 }
@@ -178,7 +186,7 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   color: var(--text-secondary);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -186,6 +194,7 @@ a {
 
 .mobile-tab.active {
   color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .sync-status {
@@ -253,8 +262,10 @@ a {
 .view-head h1,
 .placeholder h1 {
   margin: 0;
-  font-size: 24px;
+  font-family: var(--font-editorial);
+  font-size: 28px;
   font-weight: 700;
+  letter-spacing: -0.035em;
   color: var(--text);
 }
 
@@ -263,6 +274,7 @@ a {
   margin-top: 6px;
   color: var(--text-secondary);
   font-size: 13px;
+  line-height: 1.6;
 }
 
 .icon-btn {
@@ -272,23 +284,26 @@ a {
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  background: var(--accent-soft);
-  border-radius: 10px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
 }
 
 .day-tabs {
   margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 0;
+  border-bottom: 1px solid var(--line-strong);
 }
 
 .day-tab {
-  height: 38px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 0;
+  border-bottom: 3px solid transparent;
   color: var(--text-secondary);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -299,12 +314,14 @@ a {
 }
 
 .day-tab.active {
-  color: #fff;
-  background: var(--accent);
+  color: var(--text);
+  background: transparent;
+  border-bottom-color: var(--accent);
+  font-weight: 700;
 }
 .day-tab.today:not(.active) {
   color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent);
+  font-weight: 700;
 }
 .today-mark {
   margin-left: 3px;
@@ -323,7 +340,7 @@ a {
 }
 
 .course-card {
-  border-radius: var(--radius);
+  border-radius: 3px;
   padding: 14px 16px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -335,13 +352,13 @@ a {
 }
 
 .course-card.tint {
-  border-left: 3px solid #2e7fb8;
-  background: color-mix(in srgb, #2e7fb8 9%, var(--surface));
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) var(--course-tint-strength), var(--surface));
 }
 
 .course-card.tint:nth-child(2) {
-  border-left-color: #5d529b;
-  background: color-mix(in srgb, #5d529b 9%, var(--surface));
+  border-left-color: var(--line-strong);
+  background: color-mix(in srgb, var(--line-strong) var(--course-tint-strength), var(--surface));
 }
 
 .course-head {
@@ -398,7 +415,7 @@ a {
   }
 
   .app-header {
-    height: 54px;
+    min-height: 54px;
     padding: 0 12px;
   }
 

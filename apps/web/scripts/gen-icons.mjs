@@ -1,5 +1,5 @@
 // 生成 PWA 所需 PNG 图标（无第三方依赖：用 Node zlib 手写 PNG 编码）。
-// 纯品牌色方块 + 居中的纸张/课程线条标记（避免依赖字体渲染）。
+// 纸本与活字视觉：暖陶红底、略带错位的纸张和简洁排版线条。
 import zlib from 'node:zlib'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -8,9 +8,9 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const outDir = join(__dirname, '../public/pwa')
 
-const ACCENT = [56, 89, 214] // #3859D6
-const PAPER = [247, 249, 255]
-const PAPER_BACK = [171, 185, 239]
+const ACCENT = [155, 61, 43] // #9B3D2B
+const PAPER = [252, 250, 245] // #FCFAF5
+const PAPER_BACK = [216, 209, 197] // #D8D1C5
 
 function crc32(buf) {
   let c = ~0
@@ -36,7 +36,7 @@ function roundedRect(x, y, width, height, radius, px, py) {
   return dx * dx + dy * dy <= radius * radius
 }
 
-// 生成指定大小的 PNG：靛蓝底色 + 两层纸张 + 五条课程线。
+// 生成指定大小的 PNG：陶红底色 + 两层纸张 + 五条课程线。
 export function makePng(size, padRatio = 0.2) {
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(size, 0)
@@ -49,7 +49,7 @@ export function makePng(size, padRatio = 0.2) {
   const cardY = margin + Math.floor(size * 0.08)
   const cardW = size - cardX * 2
   const cardH = size - cardY - margin - Math.floor(size * 0.04)
-  const radius = Math.floor(size * 0.1)
+  const radius = Math.floor(size * 0.045)
   for (let y = 0; y < size; y++) {
     const row = Buffer.alloc(1 + size * 4)
     row[0] = 0 // filter: none

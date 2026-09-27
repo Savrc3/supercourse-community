@@ -242,6 +242,7 @@ export function mergeConsecutive(
       last &&
       last.weekday === slot.weekday &&
       last.courseId === slot.course_id &&
+      last.room === slot.room &&
       slot.start_lesson === last.endLesson + 1
     ) {
       // 延伸到当前格
@@ -336,6 +337,56 @@ export function blockRowSpan(
     (r) => block.endLesson >= r.firstLesson && block.endLesson <= r.lastLesson,
   )
   return { from: from === -1 ? 0 : from, to: to === -1 ? from : to }
+}
+
+export interface OverlapLane<T> {
+  block: T
+  group: number
+  lane: number
+  laneCount: number
+}
+
+/** Arrange time-overlapping blocks into compact, non-overlapping lanes for the single-day view. */
+export function assignOverlapLanes<T extends { startLesson: number; endLesson: number }>(
+  blocks: T[],
+  rangeOf: (block: T) => { start: number; end: number } = (block) => ({
+    start: block.startLesson,
+    end: block.endLesson,
+  }),
+): OverlapLane<T>[] {
+  const sorted = blocks
+    .map((block, index) => ({ block, index }))
+    .sort((a, b) => rangeOf(a.block).start - rangeOf(b.block).start || rangeOf(a.block).end - rangeOf(b.block).end || a.index - b.index)
+  const groups: typeof sorted[] = []
+  let groupEnd = Number.NEGATIVE_INFINITY
+
+  for (const item of sorted) {
+    const range = rangeOf(item.block)
+    if (range.start > groupEnd) {
+      groups.push([])
+      groupEnd = range.end
+    } else {
+      groupEnd = Math.max(groupEnd, range.end)
+    }
+    groups[groups.length - 1]!.push(item)
+  }
+
+  const result = new Array<OverlapLane<T>>(blocks.length)
+  groups.forEach((group, groupIndex) => {
+    const laneEnds: number[] = []
+    const placed = group.map(({ block, index }) => {
+      const range = rangeOf(block)
+      let lane = laneEnds.findIndex((end) => end < range.start)
+      if (lane === -1) lane = laneEnds.length
+      laneEnds[lane] = range.end
+      return { block, index, lane }
+    })
+    placed.forEach(({ block, index, lane }) => {
+      result[index] = { block, group: groupIndex, lane, laneCount: laneEnds.length }
+    })
+  })
+
+  return result
 }
 
 /** 今日视图单帧条目：一块课 + 起止时间 + 相对当前时刻的状态。 */

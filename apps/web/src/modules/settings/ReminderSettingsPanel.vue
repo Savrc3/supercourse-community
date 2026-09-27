@@ -134,7 +134,7 @@ async function testQQ() {
 .reminder-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .reminder-actions button { min-height: 38px; padding: 0 13px; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .ghost-btn { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
-.primary-btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; font-weight: 600; }
+.primary-btn { border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .reminder-actions button:disabled { cursor: wait; opacity: .65; }
 .feedback { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
 .feedback.success { color: var(--accent); background: var(--accent-soft); }

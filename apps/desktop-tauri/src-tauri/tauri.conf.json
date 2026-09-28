@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "课序轻量版",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "identifier": "icu.savrc3.supercourse.tauri",
   "build": {
     "beforeDevCommand": "npm run dev --workspace @supercourse/web -- --host 127.0.0.1",

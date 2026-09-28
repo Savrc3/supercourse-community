@@ -4,7 +4,7 @@
 
 本项目的定位是一个可自行带走、运行和修改的开源工具，不是公共 SaaS，也不提供维护者的个人服务器作为默认后端。使用者可以把它当作本地课表，也可以按文档部署自己的同步服务；公开版本不承诺持续在线服务或长期兼容维护。
 
-课序 2.0.2 已发布至 Web/PWA、Android 与 Windows，包含精简后的「课表 / 待办 / 设置」导航、待办按日期视图，以及更轻量的待办快速创建。Android APK 与 Windows 轻量桌面安装包请从 [v2.0.2 Release](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.2) 下载。Windows 版与旧 Electron 版使用不同的本地数据目录；远程模式迁移前先确认旧版待传队列为 0，再在新版连接同一服务器登录；本地模式请先导出备份再导入。
+课序 2.0.3 已发布至 Web/PWA、Android 与 Windows，设置页增加分组目录，冲突箱和诊断入口收纳到问题处理区。Android APK 与 Windows 轻量安装包见 [v2.0.3 Release](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.3)。Windows 轻量版与旧 Electron 版使用不同的本地数据目录；远程模式迁移前确认旧版待传队列为 0，再用同一服务器账号登录；本地模式先导出备份再导入。
 
 ## 作者说明
 
@@ -21,6 +21,10 @@
 启动自己的 FastAPI + SQLite 服务，在应用首次启动时选择“连接自己的服务器”，填入服务器地址，再用同一个账号登录各端。服务端是同步真相源，客户端支持本地优先、断网写入和 outbox 重试。
 
 最简单的自建方式见 [deploy/README.md](deploy/README.md)。
+
+### 公开下载
+
+当前版本 `2.0.3` 的 Android APK 与 Windows 轻量版安装包可在[公开 Release 页面](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.3)下载；Web/PWA 可直接使用，也可自行部署。发布包不包含作者的个人服务器数据。
 
 ## 功能
 
@@ -61,7 +65,7 @@ npm run build:windows --workspace @supercourse/desktop-tauri
 npm run android:release --workspace @supercourse/mobile
 ```
 
-Windows 轻量安装包在 `apps/desktop-tauri/src-tauri/target/release/bundle/nsis/`；旧 Electron 回退版可用 `npm run build --workspace @supercourse/desktop` 构建。两者使用独立本地数据；从旧版迁移时，远程模式在旧版待传队列清空后用同一服务器账号登录，本地模式先导出备份再导入。Android Release APK 由脚本输出到 Android 构建目录。正式签名材料只保存在本机受保护目录，不进入仓库。
+Windows 轻量安装包在 `apps/desktop-tauri/src-tauri/target/release/bundle/nsis/`（需 Windows 构建环境）；旧 Electron 版可用 `npm run build --workspace @supercourse/desktop` 单独构建回退包。两版不会自动共享本地数据，迁移前请读 [`Windows 旧版迁移步骤`](docs/使用与恢复手册.md)。Android Release APK 由脚本输出到 Android 构建目录。正式签名材料只保存在本机受保护目录，不进入仓库。
 
 ## 质量门禁
 

@@ -493,381 +493,431 @@ async function importBackup(event: Event) {
       class="feedback error"
     >{{ error }}</p>
 
+    <nav
+      v-if="loaded"
+      class="settings-index"
+      aria-label="设置目录"
+    >
+      <a href="#account-settings">账户与设备</a>
+      <a href="#study-settings">课程与学期</a>
+      <a href="#reminder-settings">提醒</a>
+      <a href="#data-settings">数据与恢复</a>
+    </nav>
+
     <div
       v-if="!loaded"
       class="state-pill"
     >正在加载管理数据…</div>
     <template v-else>
-      <ProfileView embedded />
-      <section class="panel">
-        <div class="section-head">
-          <div>
-            <h2>学期</h2>
-            <p class="muted">已归档学期保留查看，不再作为当前课表。</p>
-          </div>
-          <button
-            class="ghost-btn"
-            type="button"
-            @click="startNewTerm"
-          >+ 新建学期</button>
-        </div>
-        <div
-          v-if="terms.length"
-          class="term-list"
-        >
-          <button
-            v-for="item in terms"
-            :key="item.id"
-            type="button"
-            class="term-item"
-            :class="{ selected: item.id === selectedTermId }"
-            @click="selectTerm(item.id)"
-          >
-            <span>
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.start_date }} · {{ item.weeks_total }} 周</small>
-            </span>
-            <span class="term-state">{{ item.is_current ? '当前' : item.archived_at ? '已归档' : '可切换' }}</span>
-          </button>
-        </div>
-        <p
-          v-else
-          class="empty"
-        >还没有学期，先新建一个。</p>
-        <form
-          class="form-grid"
-          @submit.prevent="saveTerm"
-        >
-          <label>
-            <span>学期名称</span>
-            <input
-              v-model="termForm.name"
-              placeholder="如 2026-2027-1"
-              required
-            >
-          </label>
-          <label>
-            <span>显示标签（可选）</span>
-            <input
-              v-model="termForm.label"
-              placeholder="秋季学期"
-            >
-          </label>
-          <label>
-            <span>第一周周一</span>
-            <input
-              v-model="termForm.startDate"
-              type="date"
-              required
-            >
-          </label>
-          <label>
-            <span>总周数</span>
-            <input
-              v-model.number="termForm.weeksTotal"
-              min="1"
-              max="60"
-              type="number"
-            >
-          </label>
-          <div class="form-actions">
-            <button
-              class="primary-btn"
-              type="submit"
-            >保存学期</button>
-            <button
-              v-if="activeTerm && !activeTerm.archived_at"
-              class="danger-btn"
-              type="button"
-              @click="archiveCurrentTerm"
-            >归档当前学期</button>
-            <button
-              v-if="activeTerm && (activeTerm.archived_at || !activeTerm.is_current)"
-              class="ghost-btn"
-              type="button"
-              @click="makeCurrent(activeTerm)"
-            >设为当前</button>
-          </div>
-        </form>
+      <section
+        id="account-settings"
+        class="settings-group"
+      >
+        <ProfileView embedded />
       </section>
-
-      <section class="panel">
-        <div class="section-head">
-          <div>
-            <h2>课程资料</h2>
-            <p class="muted">课程格里的内容和颜色会立即跟着这里更新。</p>
-          </div>
-          <button
-            class="ghost-btn"
-            type="button"
-            @click="openCourseCreate"
-          >+ 新建课程</button>
-        </div>
-        <div
-          v-if="activeCourses.length"
-          class="course-list"
-        >
-          <article
-            v-for="course in activeCourses"
-            :key="course.id"
-            class="course-row"
-          >
-            <span
-              class="color-dot"
-              :style="{ background: PALETTE[course.color % PALETTE.length] }"
-            />
-            <RouterLink
-              class="course-info"
-              :to="`/courses/${course.id}`"
-            >
-              <strong>{{ course.name }}</strong>
-              <small>{{ [course.teacher, course.code].filter(Boolean).join(' · ') || '暂无教师/课程代码' }}</small>
-            </RouterLink>
-            <button
-              class="ghost-btn"
-              type="button"
-              @click="editCourse(course)"
-            >编辑</button>
-            <button
-              class="ghost-btn danger"
-              type="button"
-              @click="archiveCourse(course)"
-            >归档</button>
-          </article>
-        </div>
-        <p
-          v-else
-          class="empty"
-        >当前学期还没有课程资料。</p>
-        <div
-          v-if="courseEditorOpen"
-          class="dialog-backdrop"
-          @click.self="resetCourseForm"
-        >
-          <form
-            class="course-dialog"
-            @submit.prevent="saveCourse"
-          >
-            <div class="dialog-head">
-              <h3>{{ editingCourseId ? '编辑课程' : '新建课程' }}</h3>
-              <button class="close-btn" type="button" aria-label="关闭" @click="resetCourseForm">×</button>
+      <section
+        id="study-settings"
+        class="settings-group"
+      >
+        <h2 class="group-heading">课程与学期</h2>
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>学期</h2>
+              <p class="muted">已归档学期保留查看，不再作为当前课表。</p>
             </div>
-          <label>
-            <span>课程名</span>
-            <input
-              v-model="courseForm.name"
-              required
-            >
-          </label>
-          <label>
-            <span>简称</span>
-            <input v-model="courseForm.shortName">
-          </label>
-          <label>
-            <span>教师</span>
-            <input v-model="courseForm.teacher">
-          </label>
-          <label>
-            <span>课程代码</span>
-            <input v-model="courseForm.code">
-          </label>
-          <label>
-            <span>学分</span>
-            <input
-              v-model="courseForm.credit"
-              inputmode="decimal"
-            >
-          </label>
-          <label>
-            <span>课程颜色</span>
-            <select v-model.number="courseForm.color">
-              <option
-                v-for="(color, index) in PALETTE"
-                :key="color"
-                :value="index"
-              >颜色 {{ index + 1 }}</option>
-            </select>
-          </label>
-            <div class="form-actions">
             <button
-              class="primary-btn"
-              type="submit"
-            >{{ editingCourseId ? '保存课程' : '创建课程' }}</button>
-            <button
-              v-if="editingCourseId"
               class="ghost-btn"
               type="button"
-              @click="resetCourseForm"
-            >取消编辑</button>
+              @click="startNewTerm"
+            >+ 新建学期</button>
+          </div>
+          <div
+            v-if="terms.length"
+            class="term-list"
+          >
+            <button
+              v-for="item in terms"
+              :key="item.id"
+              type="button"
+              class="term-item"
+              :class="{ selected: item.id === selectedTermId }"
+              @click="selectTerm(item.id)"
+            >
+              <span>
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.start_date }} · {{ item.weeks_total }} 周</small>
+              </span>
+              <span class="term-state">{{ item.is_current ? '当前' : item.archived_at ? '已归档' : '可切换' }}</span>
+            </button>
+          </div>
+          <p
+            v-else
+            class="empty"
+          >还没有学期，先新建一个。</p>
+          <form
+            class="form-grid"
+            @submit.prevent="saveTerm"
+          >
+            <label>
+              <span>学期名称</span>
+              <input
+                v-model="termForm.name"
+                placeholder="如 2026-2027-1"
+                required
+              >
+            </label>
+            <label>
+              <span>显示标签（可选）</span>
+              <input
+                v-model="termForm.label"
+                placeholder="秋季学期"
+              >
+            </label>
+            <label>
+              <span>第一周周一</span>
+              <input
+                v-model="termForm.startDate"
+                type="date"
+                required
+              >
+            </label>
+            <label>
+              <span>总周数</span>
+              <input
+                v-model.number="termForm.weeksTotal"
+                min="1"
+                max="60"
+                type="number"
+              >
+            </label>
+            <div class="form-actions">
+              <button
+                class="primary-btn"
+                type="submit"
+              >保存学期</button>
+              <button
+                v-if="activeTerm && !activeTerm.archived_at"
+                class="danger-btn"
+                type="button"
+                @click="archiveCurrentTerm"
+              >归档当前学期</button>
+              <button
+                v-if="activeTerm && (activeTerm.archived_at || !activeTerm.is_current)"
+                class="ghost-btn"
+                type="button"
+                @click="makeCurrent(activeTerm)"
+              >设为当前</button>
             </div>
           </form>
-        </div>
-      </section>
+        </section>
 
-      <section class="panel">
-        <div class="section-head">
-          <div>
-            <h2>单次覆盖</h2>
-            <p class="muted">只影响某个日期，不修改固定课表；可用于停课、换教室或调课。</p>
-          </div>
-          <button
-            class="ghost-btn"
-            type="button"
-            @click="resetOverrideForm"
-          >+ 新建覆盖</button>
-        </div>
-        <div
-          v-if="activeOverrides.length"
-          class="override-list"
-        >
-          <article
-            v-for="item in activeOverrides"
-            :key="item.id"
-            class="override-row"
-          >
+        <section class="panel">
+          <div class="section-head">
             <div>
-              <strong>{{ item.day }} · {{ courseName(item.course_id) }}</strong>
-              <small>{{ actionLabel(item.action) }}{{ item.room ? ` → ${item.room}` : '' }}{{ item.note ? ` · ${item.note}` : '' }}</small>
+              <h2>课程资料</h2>
+              <p class="muted">课程格里的内容和颜色会立即跟着这里更新。</p>
             </div>
-            <div class="row-actions">
+            <button
+              class="ghost-btn"
+              type="button"
+              @click="openCourseCreate"
+            >+ 新建课程</button>
+          </div>
+          <div
+            v-if="activeCourses.length"
+            class="course-list"
+          >
+            <article
+              v-for="course in activeCourses"
+              :key="course.id"
+              class="course-row"
+            >
+              <span
+                class="color-dot"
+                :style="{ background: PALETTE[course.color % PALETTE.length] }"
+              />
+              <RouterLink
+                class="course-info"
+                :to="`/courses/${course.id}`"
+              >
+                <strong>{{ course.name }}</strong>
+                <small>{{ [course.teacher, course.code].filter(Boolean).join(' · ') || '暂无教师/课程代码' }}</small>
+              </RouterLink>
               <button
                 class="ghost-btn"
                 type="button"
-                @click="editOverride(item)"
+                @click="editCourse(course)"
               >编辑</button>
               <button
                 class="ghost-btn danger"
                 type="button"
-                @click="removeOverride(item)"
-              >删除</button>
+                @click="archiveCourse(course)"
+              >归档</button>
+            </article>
+          </div>
+          <p
+            v-else
+            class="empty"
+          >当前学期还没有课程资料。</p>
+          <div
+            v-if="courseEditorOpen"
+            class="dialog-backdrop"
+            @click.self="resetCourseForm"
+          >
+            <form
+              class="course-dialog"
+              @submit.prevent="saveCourse"
+            >
+              <div class="dialog-head">
+                <h3>{{ editingCourseId ? '编辑课程' : '新建课程' }}</h3>
+                <button
+                  class="close-btn"
+                  type="button"
+                  aria-label="关闭"
+                  @click="resetCourseForm"
+                >×</button>
+              </div>
+              <label>
+                <span>课程名</span>
+                <input
+                  v-model="courseForm.name"
+                  required
+                >
+              </label>
+              <label>
+                <span>简称</span>
+                <input v-model="courseForm.shortName">
+              </label>
+              <label>
+                <span>教师</span>
+                <input v-model="courseForm.teacher">
+              </label>
+              <label>
+                <span>课程代码</span>
+                <input v-model="courseForm.code">
+              </label>
+              <label>
+                <span>学分</span>
+                <input
+                  v-model="courseForm.credit"
+                  inputmode="decimal"
+                >
+              </label>
+              <label>
+                <span>课程颜色</span>
+                <select v-model.number="courseForm.color">
+                  <option
+                    v-for="(color, index) in PALETTE"
+                    :key="color"
+                    :value="index"
+                  >颜色 {{ index + 1 }}</option>
+                </select>
+              </label>
+              <div class="form-actions">
+                <button
+                  class="primary-btn"
+                  type="submit"
+                >{{ editingCourseId ? '保存课程' : '创建课程' }}</button>
+                <button
+                  v-if="editingCourseId"
+                  class="ghost-btn"
+                  type="button"
+                  @click="resetCourseForm"
+                >取消编辑</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>单次覆盖</h2>
+              <p class="muted">只影响某个日期，不修改固定课表；可用于停课、换教室或调课。</p>
             </div>
-          </article>
-        </div>
-        <p
-          v-else
-          class="empty"
-        >当前学期还没有单次覆盖。</p>
-        <form
-          class="form-grid override-form"
-          @submit.prevent="saveOverride"
-        >
-          <label class="wide">
-            <span>固定课程格</span>
-            <select v-model="overrideForm.slotId">
-              <option
-                v-for="slot in slotOptions"
-                :key="slot.id"
-                :value="slot.id"
-              >{{ slot.label }}</option>
-            </select>
-          </label>
-          <label>
-            <span>日期</span>
-            <input
-              v-model="overrideForm.day"
-              type="date"
-              required
-            >
-          </label>
-          <label>
-            <span>类型</span>
-            <select v-model="overrideForm.action">
-              <option value="room">换教室</option>
-              <option value="cancel">停课</option>
-              <option value="move">调课</option>
-            </select>
-          </label>
-          <label v-if="overrideForm.action === 'room'">
-            <span>新教室</span>
-            <input v-model="overrideForm.room">
-          </label>
-          <template v-if="overrideForm.action === 'move'">
-            <label>
-              <span>目标星期</span>
-              <select v-model.number="overrideForm.toWeekday">
-                <option
-                  v-for="day in 7"
-                  :key="day"
-                  :value="day"
-                >周{{ DAY_NAMES[day - 1] }}</option>
-              </select>
-            </label>
-            <label>
-              <span>目标开始节</span>
-              <input
-                v-model.number="overrideForm.toStartLesson"
-                min="1"
-                max="12"
-                type="number"
-              >
-            </label>
-            <label>
-              <span>目标结束节</span>
-              <input
-                v-model.number="overrideForm.toEndLesson"
-                min="1"
-                max="12"
-                type="number"
-              >
-            </label>
-          </template>
-          <label class="wide">
-            <span>说明（可选）</span>
-            <input
-              v-model="overrideForm.note"
-              placeholder="如：临时换到实验楼"
-            >
-          </label>
-          <div class="form-actions">
             <button
-              class="primary-btn"
-              type="submit"
-            >{{ editingOverrideId ? '保存覆盖' : '保存覆盖' }}</button>
-            <button
-              v-if="editingOverrideId"
               class="ghost-btn"
               type="button"
               @click="resetOverrideForm"
-            >取消编辑</button>
+            >+ 新建覆盖</button>
           </div>
-        </form>
+          <div
+            v-if="activeOverrides.length"
+            class="override-list"
+          >
+            <article
+              v-for="item in activeOverrides"
+              :key="item.id"
+              class="override-row"
+            >
+              <div>
+                <strong>{{ item.day }} · {{ courseName(item.course_id) }}</strong>
+                <small>{{ actionLabel(item.action) }}{{ item.room ? ` → ${item.room}` : '' }}{{ item.note ? ` · ${item.note}` : '' }}</small>
+              </div>
+              <div class="row-actions">
+                <button
+                  class="ghost-btn"
+                  type="button"
+                  @click="editOverride(item)"
+                >编辑</button>
+                <button
+                  class="ghost-btn danger"
+                  type="button"
+                  @click="removeOverride(item)"
+                >删除</button>
+              </div>
+            </article>
+          </div>
+          <p
+            v-else
+            class="empty"
+          >当前学期还没有单次覆盖。</p>
+          <form
+            class="form-grid override-form"
+            @submit.prevent="saveOverride"
+          >
+            <label class="wide">
+              <span>固定课程格</span>
+              <select v-model="overrideForm.slotId">
+                <option
+                  v-for="slot in slotOptions"
+                  :key="slot.id"
+                  :value="slot.id"
+                >{{ slot.label }}</option>
+              </select>
+            </label>
+            <label>
+              <span>日期</span>
+              <input
+                v-model="overrideForm.day"
+                type="date"
+                required
+              >
+            </label>
+            <label>
+              <span>类型</span>
+              <select v-model="overrideForm.action">
+                <option value="room">换教室</option>
+                <option value="cancel">停课</option>
+                <option value="move">调课</option>
+              </select>
+            </label>
+            <label v-if="overrideForm.action === 'room'">
+              <span>新教室</span>
+              <input v-model="overrideForm.room">
+            </label>
+            <template v-if="overrideForm.action === 'move'">
+              <label>
+                <span>目标星期</span>
+                <select v-model.number="overrideForm.toWeekday">
+                  <option
+                    v-for="day in 7"
+                    :key="day"
+                    :value="day"
+                  >周{{ DAY_NAMES[day - 1] }}</option>
+                </select>
+              </label>
+              <label>
+                <span>目标开始节</span>
+                <input
+                  v-model.number="overrideForm.toStartLesson"
+                  min="1"
+                  max="12"
+                  type="number"
+                >
+              </label>
+              <label>
+                <span>目标结束节</span>
+                <input
+                  v-model.number="overrideForm.toEndLesson"
+                  min="1"
+                  max="12"
+                  type="number"
+                >
+              </label>
+            </template>
+            <label class="wide">
+              <span>说明（可选）</span>
+              <input
+                v-model="overrideForm.note"
+                placeholder="如：临时换到实验楼"
+              >
+            </label>
+            <div class="form-actions">
+              <button
+                class="primary-btn"
+                type="submit"
+              >{{ editingOverrideId ? '保存覆盖' : '保存覆盖' }}</button>
+              <button
+                v-if="editingOverrideId"
+                class="ghost-btn"
+                type="button"
+                @click="resetOverrideForm"
+              >取消编辑</button>
+            </div>
+          </form>
+        </section>
       </section>
-      <ReminderSettingsPanel />
-      <section class="panel utility-panel">
-        <div class="section-head">
-          <div>
-            <h2>本地备份</h2>
-            <p class="muted">导出当前设备上的课程、待办和图片；备份文件只保存在你的设备上。</p>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="ghost-btn" type="button" :disabled="backupBusy" @click="exportBackup">导出本地备份</button>
-          <button class="ghost-btn" type="button" :disabled="backupBusy" @click="backupInput?.click()">导入本地备份</button>
-          <input ref="backupInput" class="visually-hidden" type="file" accept="application/json,.json" @change="importBackup">
-        </div>
-        <p v-if="backupMessage" class="muted">{{ backupMessage }}</p>
+      <section
+        id="reminder-settings"
+        class="settings-group"
+      >
+        <h2 class="group-heading">提醒</h2>
+        <ReminderSettingsPanel />
       </section>
-      <section class="panel utility-panel">
-        <div class="section-head">
-          <div>
-            <h2>同步与问题处理</h2>
-            <p class="muted">冲突需要人工选择保留哪一端；诊断页用于确认本地数据和提醒调度状态。</p>
+      <section
+        id="data-settings"
+        class="settings-group"
+      >
+        <h2 class="group-heading">数据与恢复</h2>
+        <section class="panel utility-panel">
+          <div class="section-head">
+            <div>
+              <h2>本地备份</h2>
+              <p class="muted">导出当前设备上的课程、待办和图片；备份文件只保存在你的设备上。</p>
+            </div>
           </div>
-        </div>
-        <div class="form-actions">
-          <RouterLink
-            class="ghost-btn"
-            to="/conflicts"
-          >打开冲突箱</RouterLink>
-          <RouterLink
-            class="ghost-btn"
-            to="/diagnostics"
-          >打开诊断页</RouterLink>
-          <RouterLink
-            class="ghost-btn"
-            to="/reminders"
-          >查看提醒</RouterLink>
-        </div>
+          <div class="form-actions">
+            <button
+              class="ghost-btn"
+              type="button"
+              :disabled="backupBusy"
+              @click="exportBackup"
+            >导出本地备份</button>
+            <button
+              class="ghost-btn"
+              type="button"
+              :disabled="backupBusy"
+              @click="backupInput?.click()"
+            >导入本地备份</button>
+            <input
+              ref="backupInput"
+              class="visually-hidden"
+              type="file"
+              accept="application/json,.json"
+              @change="importBackup"
+            >
+          </div>
+          <p
+            v-if="backupMessage"
+            class="muted"
+          >{{ backupMessage }}</p>
+        </section>
+        <details class="advanced-tools">
+          <summary>同步问题与诊断</summary>
+          <p class="muted">仅在同步异常或排查提醒问题时需要。冲突处理会影响保留的数据，请确认内容后再操作。</p>
+          <div class="form-actions">
+            <RouterLink
+              class="ghost-btn"
+              to="/conflicts"
+            >打开冲突箱</RouterLink>
+            <RouterLink
+              class="ghost-btn"
+              to="/diagnostics"
+            >打开诊断页</RouterLink>
+          </div>
+        </details>
       </section>
     </template>
   </section>
@@ -876,6 +926,64 @@ async function importBackup(event: Event) {
 <style scoped>
 .manage {
   padding-top: 4px;
+}
+.settings-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 18px 0 2px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.settings-index a {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 4px;
+}
+.settings-index a:hover,
+.settings-index a:focus-visible {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+.settings-group {
+  scroll-margin-top: 14px;
+  margin-top: 18px;
+}
+.group-heading {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.settings-group > .panel,
+.settings-group > .reminder-settings {
+  margin-top: 0;
+}
+.advanced-tools {
+  margin-top: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.advanced-tools summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.advanced-tools summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.advanced-tools > p {
+  margin: 10px 0;
 }
 .ghost-btn,
 .primary-btn,

@@ -1,6 +1,6 @@
 [package]
 name = "supercourse-tauri"
-version = "2.0.2"
+version = "2.0.3"
 description = "课序 Windows 轻量桌面端"
 authors = ["SuperCourse"]
 edition = "2021"

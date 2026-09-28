@@ -4,7 +4,7 @@
 
 本项目的定位是一个可自行带走、运行和修改的开源工具，不是公共 SaaS，也不提供维护者的个人服务器作为默认后端。使用者可以把它当作本地课表，也可以按文档部署自己的同步服务；公开版本不承诺持续在线服务或长期兼容维护。
 
-课序 2.0.2 的 Web/PWA 与 Android 版本已发布，包含精简后的「课表 / 待办 / 设置」导航、待办清单与按日期视图，以及更轻量的待办快速创建。Android APK 请从 [v2.0.2 Release](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.2) 下载。Windows 轻量桌面安装包正在原生构建，完成后会补入同一 Release。Windows 版与旧 Electron 版使用不同的本地数据目录；远程模式迁移前先确认旧版待传队列为 0，再在新版连接同一服务器登录；本地模式请先导出备份再导入。
+课序 2.0.2 已发布至 Web/PWA、Android 与 Windows，包含精简后的「课表 / 待办 / 设置」导航、待办按日期视图，以及更轻量的待办快速创建。Android APK 与 Windows 轻量桌面安装包请从 [v2.0.2 Release](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.2) 下载。Windows 版与旧 Electron 版使用不同的本地数据目录；远程模式迁移前先确认旧版待传队列为 0，再在新版连接同一服务器登录；本地模式请先导出备份再导入。
 
 ## 作者说明
 

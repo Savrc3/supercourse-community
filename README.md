@@ -24,7 +24,7 @@
 
 ### 公开下载
 
-当前版本 `2.0.3` 的 Android APK 与 Windows 轻量版安装包可在[公开 Release 页面](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.3)下载；Web/PWA 可直接使用，也可自行部署。发布包不包含作者的个人服务器数据。
+当前版本 `2.0.4` 的 Android APK 与 Windows 轻量版安装包可在[公开 Release 页面](https://github.com/Savrc3/supercourse-community/releases/tag/v2.0.4)下载；Web/PWA 可直接使用，也可自行部署。发布包不包含作者的个人服务器数据。
 
 ## 功能
 
@@ -33,6 +33,7 @@
 - 课程待办：标题、课程、截止日期/时间、优先级、标签、完成状态、提醒开关。
 - 待办详情：富文本、清单、链接、图片和附件，支持离线缓存。
 - 时间线、提醒、回收站、搜索、冲突箱和设备管理。
+- Android 桌面小组件：提供上课指引、今日课表、课业速览与待办清单四种卡片。
 - 本地模式与自建服务器模式可以在启动向导中切换。
 
 ## 五分钟本地开发

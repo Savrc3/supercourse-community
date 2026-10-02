@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Bold, Check, Code2, Eye, ImagePlus, Link as LinkIcon, List, ListChecks, ListOrdered, Save, X } from 'lucide-vue-next'
+import { ArrowLeft, Bold, Check, ChevronDown, Code2, Eye, ImagePlus, Link as LinkIcon, List, ListChecks, ListOrdered, Save, X } from 'lucide-vue-next'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -678,133 +678,156 @@ function currentDue(): string {
           <p class="editor-hint">{{ sourceMode ? '当前为 Markdown 源码模式，点击眼睛按钮可预览格式。' : '内容会自动保存，支持粘贴图片。' }}按 Esc 返回列表。{{ pendingMedia ? `待上传图片 ${pendingMedia} 张` : '' }}</p>
         </article>
 
-        <aside class="meta-panel">
-          <div class="panel-title">待办信息</div>
-          <label class="field wide">
-            <span>标题</span>
-            <input
-              v-model="form.title"
-              maxlength="200"
-              placeholder="如：完成高数第三章习题"
-              @input="scheduleSave"
-            >
-          </label>
-
-          <label class="field wide">
-            <span>所属课程</span>
-            <select
-              v-model="form.courseId"
-              @change="scheduleSave"
-            >
-              <option value="">杂事（不关联课程）</option>
-              <optgroup
-                v-for="group in activeTermGroups"
-                :key="group.term.id"
-                :label="group.term.name"
-              >
-                <option
-                  v-for="course in group.courses"
-                  :key="course.id"
-                  :value="course.id"
-                >{{ course.name }}</option>
-              </optgroup>
-            </select>
-          </label>
-
-          <div class="due-controls">
-            <label class="field">
-              <span>截止日期</span>
+        <details class="meta-panel">
+          <summary class="panel-summary">
+            <span>
+              <strong>待办设置</strong>
+              <small>{{ courseLabel(form.courseId) }} · {{ currentDue() }}</small>
+            </span>
+            <ChevronDown
+              :size="17"
+              aria-hidden="true"
+            />
+          </summary>
+          <div class="meta-fields">
+            <label class="field wide">
+              <span>标题</span>
               <input
-                v-model="form.dueDate"
-                type="date"
-                @change="scheduleSave"
+                v-model="form.title"
+                maxlength="200"
+                placeholder="如：完成高数第三章习题"
+                @input="scheduleSave"
               >
             </label>
-            <label class="field checkbox-field">
-              <input
-                v-model="form.allDay"
-                type="checkbox"
+
+            <label class="field wide">
+              <span>所属课程</span>
+              <select
+                v-model="form.courseId"
                 @change="scheduleSave"
               >
-              <span>全天</span>
+                <option value="">杂事（不关联课程）</option>
+                <optgroup
+                  v-for="group in activeTermGroups"
+                  :key="group.term.id"
+                  :label="group.term.name"
+                >
+                  <option
+                    v-for="course in group.courses"
+                    :key="course.id"
+                    :value="course.id"
+                  >{{ course.name }}</option>
+                </optgroup>
+              </select>
             </label>
-            <label
-              v-if="!form.allDay"
-              class="field due-time"
-            >
-              <span>截止时间</span>
-              <input
-                v-model="form.dueTime"
-                type="time"
-                @change="scheduleSave"
+
+            <div class="due-controls">
+              <label class="field">
+                <span>截止日期</span>
+                <input
+                  v-model="form.dueDate"
+                  type="date"
+                  @change="scheduleSave"
+                >
+              </label>
+              <label class="field checkbox-field">
+                <input
+                  v-model="form.allDay"
+                  type="checkbox"
+                  @change="scheduleSave"
+                >
+                <span>全天</span>
+              </label>
+              <label
+                v-if="!form.allDay"
+                class="field due-time"
               >
-            </label>
-          </div>
-
-          <label class="field wide">
-            <span>优先级</span>
-            <select
-              :value="form.priority"
-              @change="form.priority = Number(($event.target as HTMLSelectElement).value) as TodoPriority; scheduleSave()"
-            >
-              <option
-                v-for="option in PRIORITY_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-              >{{ option.label }}</option>
-            </select>
-          </label>
-
-          <label class="field wide">
-            <span>标签</span>
-            <input
-              v-model="form.tags"
-              placeholder="多个标签用逗号分隔"
-              @input="scheduleSave"
-            >
-          </label>
-
-          <div class="field wide reminder-block">
-            <span>待办提醒</span>
-            <div class="reminder-modes">
-              <label v-for="mode in REMIND_MODES" :key="mode.value" class="reminder-mode">
-                <input v-model="form.remindMode" type="radio" :value="mode.value" @change="scheduleSave">
-                <span>{{ mode.label }}</span>
+                <span>截止时间</span>
+                <input
+                  v-model="form.dueTime"
+                  type="time"
+                  @change="scheduleSave"
+                >
               </label>
             </div>
-            <div v-if="form.remindMode === 'custom'" class="reminder-presets">
-              <button
-                v-for="preset in REMIND_PRESETS"
-                :key="preset.value"
-                class="preset-chip"
-                type="button"
-                :class="{ active: form.offsets.includes(preset.value) }"
-                :aria-pressed="form.offsets.includes(preset.value)"
-                @click="toggleOffset(preset.value)"
-              >
-                提前 {{ preset.label }}
-              </button>
-            </div>
-            <small class="field-hint">{{ reminderHint }}</small>
-          </div>
 
-          <button
-            class="done-toggle"
-            type="button"
-            :class="{ checked: done }"
-            @click="toggleDone"
-          >
-            <span class="done-check">
-              <Check
-                v-if="done"
-                :size="14"
-                aria-hidden="true"
-              />
-            </span>
-            <span>{{ done ? '已完成' : '未完成' }}</span>
-            <small v-if="doneAt">{{ doneAt.slice(0, 16).replace('T', ' ') }}</small>
-          </button>
-        </aside>
+            <label class="field wide">
+              <span>优先级</span>
+              <select
+                :value="form.priority"
+                @change="form.priority = Number(($event.target as HTMLSelectElement).value) as TodoPriority; scheduleSave()"
+              >
+                <option
+                  v-for="option in PRIORITY_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >{{ option.label }}</option>
+              </select>
+            </label>
+
+            <label class="field wide">
+              <span>标签</span>
+              <input
+                v-model="form.tags"
+                placeholder="多个标签用逗号分隔"
+                @input="scheduleSave"
+              >
+            </label>
+
+            <div class="field wide reminder-block">
+              <span>待办提醒</span>
+              <div class="reminder-modes">
+                <label
+                  v-for="mode in REMIND_MODES"
+                  :key="mode.value"
+                  class="reminder-mode"
+                >
+                  <input
+                    v-model="form.remindMode"
+                    type="radio"
+                    :value="mode.value"
+                    @change="scheduleSave"
+                  >
+                  <span>{{ mode.label }}</span>
+                </label>
+              </div>
+              <div
+                v-if="form.remindMode === 'custom'"
+                class="reminder-presets"
+              >
+                <button
+                  v-for="preset in REMIND_PRESETS"
+                  :key="preset.value"
+                  class="preset-chip"
+                  type="button"
+                  :class="{ active: form.offsets.includes(preset.value) }"
+                  :aria-pressed="form.offsets.includes(preset.value)"
+                  @click="toggleOffset(preset.value)"
+                >
+                  提前 {{ preset.label }}
+                </button>
+              </div>
+              <small class="field-hint">{{ reminderHint }}</small>
+            </div>
+
+            <button
+              class="done-toggle"
+              type="button"
+              :class="{ checked: done }"
+              @click="toggleDone"
+            >
+              <span class="done-check">
+                <Check
+                  v-if="done"
+                  :size="14"
+                  aria-hidden="true"
+                />
+              </span>
+              <span>{{ done ? '已完成' : '未完成' }}</span>
+              <small v-if="doneAt">{{ doneAt.slice(0, 16).replace('T', ' ') }}</small>
+            </button>
+          </div>
+        </details>
       </div>
     </template>
   </section>
@@ -822,8 +845,18 @@ function currentDue(): string {
 .back-btn:hover { color: var(--accent); }
 .save-state { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 12px; }
 .save-state.error { color: var(--danger); }
-.detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; margin-top: 16px; }
+.detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; margin-top: 16px; align-items: start; }
 .editor-panel, .meta-panel { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.meta-panel { position: sticky; top: calc(var(--rh) + 14px); }
+.panel-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; cursor: pointer; }
+.panel-summary::-webkit-details-marker { display: none; }
+.panel-summary > span { display: grid; min-width: 0; gap: 4px; }
+.panel-summary strong { color: var(--text); font-size: 14px; }
+.panel-summary small { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.panel-summary > svg { flex: none; color: var(--text-secondary); transition: transform 160ms ease-out; }
+.meta-panel[open] .panel-summary { margin-bottom: 16px; }
+.meta-panel[open] .panel-summary > svg { transform: rotate(180deg); }
+.meta-fields { display: grid; }
 .editor-title-row { margin-bottom: 16px; }
 .editor-title-row h1 { margin: 0; color: var(--text); font-size: 22px; line-height: 1.35; }
 .context-text { display: block; margin-top: 5px; color: var(--text-secondary); font-size: 12px; }
@@ -859,7 +892,6 @@ function currentDue(): string {
 .markdown-source { display: block; width: 100%; min-height: 360px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; background: var(--surface); color: var(--text); font: 13px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .markdown-source:focus { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
 .editor-hint { margin: 18px 0 0; color: var(--text-secondary); font-size: 12px; }
-.panel-title { margin-bottom: 15px; color: var(--text); font-size: 15px; font-weight: 650; }
 .field { display: grid; gap: 5px; color: var(--text-secondary); font-size: 13px; }
 .field + .field, .due-controls + .field { margin-top: 13px; }
 .field input, .field select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
@@ -885,14 +917,17 @@ function currentDue(): string {
 .done-toggle.checked .done-check { border-color: var(--accent); background: var(--accent); }
 .done-toggle small { color: var(--text-secondary); font-size: 11px; }
 @media (max-width: 760px) {
-  .detail-layout { grid-template-columns: 1fr; }
-  .meta-panel { order: -1; }
+  .detail-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .editor-panel, .meta-panel { padding: 16px; }
+  .meta-panel { position: static; }
+  .editor-content { min-height: 300px; }
+  .editor-content :deep(.ProseMirror) { min-height: 270px; }
 }
 @media (max-width: 430px) {
-  .editor-panel, .meta-panel { padding: 15px; }
+  .editor-panel, .meta-panel { padding: 14px; }
   .editor-title-row h1 { font-size: 19px; }
-  .editor-content { min-height: 260px; }
-  .editor-content :deep(.ProseMirror) { min-height: 230px; }
+  .editor-content { min-height: 240px; }
+  .editor-content :deep(.ProseMirror) { min-height: 210px; }
   .markdown-source { min-height: 260px; }
 }
 </style>

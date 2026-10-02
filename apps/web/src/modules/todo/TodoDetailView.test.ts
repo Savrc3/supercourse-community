@@ -100,6 +100,25 @@ describe('TodoDetailView 待办详情', () => {
     vi.useRealTimers()
   })
 
+  it('优先展示待办正文，把低频编辑设置收进可展开区域', async () => {
+    const wrapper = mount(TodoDetailView, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    })
+    await flushPromises()
+
+    const primary = wrapper.get('.detail-layout').element.firstElementChild
+    const settings = wrapper.get('.meta-panel').element as HTMLDetailsElement
+    expect(primary?.matches('.editor-panel')).toBe(true)
+    expect(settings.tagName).toBe('DETAILS')
+    expect(settings.open).toBe(false)
+    expect(wrapper.get('.panel-summary').text()).toContain('待办设置')
+
+    await wrapper.get('.panel-summary').trigger('click')
+    expect(settings.open).toBe(true)
+    expect(wrapper.find('input[placeholder="如：完成高数第三章习题"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('加载正文和元数据，并在修改后自动保存', async () => {
     const wrapper = mount(TodoDetailView, {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },

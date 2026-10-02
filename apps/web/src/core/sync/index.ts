@@ -11,6 +11,7 @@ import { isLocalMode } from '../connection'
 
 const TOKEN_KEY = 'sc_token'
 const CURSOR_KEY = 'sc_cursor'
+const WIDGET_SNAPSHOT_READY_KEY = 'sc_widget_snapshot_ready'
 export const SYNC_POLL_INTERVAL_MS = 5 * 60 * 1000
 const SSE_SYNC_DELAY_MS = 800
 const LOCAL_WRITE_SYNC_DELAY_MS = 300
@@ -113,12 +114,18 @@ export class SyncClient {
     return localStorage.getItem(TOKEN_KEY)
   }
 
+  /** Whether the local widget snapshot is trustworthy, including a successfully synced empty account. */
+  get hasUsableLocalSnapshot(): boolean {
+    return isLocalMode() || localStorage.getItem(WIDGET_SNAPSHOT_READY_KEY) === '1'
+  }
+
   setToken(token: string) {
     localStorage.setItem(TOKEN_KEY, token)
   }
 
   clearToken() {
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(WIDGET_SNAPSHOT_READY_KEY)
     this.selfAckRevs.clear()
     this.knownRevs.clear()
   }
@@ -130,6 +137,7 @@ export class SyncClient {
   resetCursor() {
     this.cursor = 0
     localStorage.removeItem(CURSOR_KEY)
+    localStorage.removeItem(WIDGET_SNAPSHOT_READY_KEY)
     this.selfAckRevs.clear()
     this.knownRevs.clear()
   }
@@ -199,6 +207,7 @@ export class SyncClient {
     await this.applySnapshot(data.snapshot ?? {})
     this.noteServerTime(data.server_time)
     this.persistCursor(data.latest_rev ?? 0)
+    localStorage.setItem(WIDGET_SNAPSHOT_READY_KEY, '1')
     this.state.latestRev = data.latest_rev ?? 0
     this.state.lastSyncAt = Date.now()
     this.state.lastError = null
@@ -227,6 +236,7 @@ export class SyncClient {
         result = await this.applyChanges(data.changes ?? [])
       }
       this.persistCursor(data.next_cursor ?? data.latest_rev ?? 0)
+      localStorage.setItem(WIDGET_SNAPSHOT_READY_KEY, '1')
       this.state = reduceSyncState(this.state, {
         type: 'synced',
         latestRev: data.latest_rev ?? 0,

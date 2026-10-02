@@ -1,0 +1,4 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="150dp" android:minHeight="112dp" android:minResizeWidth="120dp" android:minResizeHeight="96dp"
+    android:initialLayout="@layout/widget_guide" android:previewLayout="@layout/widget_guide" android:previewImage="@drawable/widget_guide_preview" android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000" android:description="@string/widget_guide_description" />

@@ -1,0 +1,25 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_card_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+        <ImageView android:layout_width="3dp" android:layout_height="16dp" android:background="@drawable/widget_bookmark" android:contentDescription="@null" android:importantForAccessibility="no" />
+        <TextView android:id="@+id/widget_date" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="09月08日" android:textColor="@color/widget_secondary" android:textSize="12sp" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/widget_class_root" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="vertical" android:paddingTop="6dp">
+        <TextView android:id="@+id/widget_class_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="下一节课程" android:textColor="@color/widget_accent" android:textSize="11sp" android:textStyle="bold" />
+        <TextView android:id="@+id/widget_class_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:fontFamily="serif" android:maxLines="1" android:text="高等数学" android:textColor="@color/widget_ink" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/widget_class_detail" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:text="08:00 – 09:40 · A101" android:textColor="@color/widget_secondary" android:textSize="12sp" />
+    </LinearLayout>
+    <ImageView android:layout_width="match_parent" android:layout_height="1dp" android:background="@color/widget_rule" android:contentDescription="@null" android:importantForAccessibility="no" />
+    <LinearLayout android:id="@+id/widget_todo_root" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="0.9" android:orientation="vertical" android:paddingTop="7dp">
+        <TextView android:id="@+id/widget_todo_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="待办速览" android:textColor="@color/widget_accent" android:textSize="11sp" android:textStyle="bold" />
+        <TextView android:id="@+id/widget_todo_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:text="完成实验报告" android:textColor="@color/widget_ink" android:textSize="14sp" android:textStyle="bold" />
+        <TextView android:id="@+id/widget_todo_detail" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="09月08日 23:00" android:textColor="@color/widget_secondary" android:textSize="11sp" />
+    </LinearLayout>
+    <TextView android:id="@+id/widget_quote" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="end" android:maxLines="1" android:text="课上完了，事情没下班。" android:textColor="@color/widget_secondary" android:textSize="11sp" />
+</LinearLayout>
